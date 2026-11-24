@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block layout %}
+<main class="page narrow">
+  {% include "_flash.html" %}
+  <h1>Log in</h1>
+  {% if locked_for %}
+    <p class="over">
+      Too many wrong passwords. Try again in {{ locked_for }} seconds.
+    </p>
+  {% endif %}
+  <form method="post">
+    {{ csrf_field() }}
+    {% if ask_name %}
+    <label for="name">Your name <span class="muted">(leave blank if you set this up)</span></label>
+    <input type="text" id="name" name="name" autocomplete="username" autofocus>
+    {% endif %}
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password"
+           autocomplete="current-password" required {{ 'autofocus' if not ask_name }}>
+    <label class="checkbox">
+      <input type="checkbox" name="remember" value="on">
+      Remember this device for {{ device_days }} days
+    </label>
+    <button type="submit">Log in</button>
+  </form>
+</main>
+{% endblock %}

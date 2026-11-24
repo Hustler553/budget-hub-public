@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Connect a bank{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">Bank connections</div>
+    <h1>Connect a bank</h1>
+  </div>
+</div>
+
+<div class="card">
+  {% if plaid_env == 'sandbox' %}
+  <div class="notice">
+    <strong>This is Plaid&rsquo;s sandbox.</strong> The banks offered are
+    invented ones and the data that comes back is made up. Sign in with
+    <code>user_good</code> and <code>pass_good</code> &mdash; Plaid&rsquo;s own
+    published test login, the same for every developer. Your real bank is never
+    contacted, so do not put a real login here; it would not work anyway.
+  </div>
+  {% endif %}
+
+  <p class="muted">
+    Your bank sign-in goes to <strong>Plaid</strong>, not to this app. What
+    comes back here is a token that can read transactions and balances and
+    nothing else &mdash; it cannot move money, and this app never requests the
+    products that could.
+  </p>
+
+  <p>
+    <button type="button" id="plaid-open">Choose a bank</button>
+    <a class="button secondary" href="{{ url_for('settings.index', section='connections') }}#plaid">Cancel</a>
+  </p>
+
+  <p class="muted" id="plaid-status" role="status"></p>
+
+  <form method="post" action="{{ url_for('settings.plaid_connect') }}"
+        id="plaid-result" hidden>
+    {{ csrf_field() }}
+    <input type="hidden" name="public_token" value="">
+    <input type="hidden" name="institution_id" value="">
+    <input type="hidden" name="institution_name" value="">
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<script src="{{ url_for('static', filename='plaid-link.js') }}"
+        data-link-token="{{ link_token }}"></script>
+{% endblock %}

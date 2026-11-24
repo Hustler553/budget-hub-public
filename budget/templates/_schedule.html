@@ -1,0 +1,58 @@
+<div class="dh">
+  <h2>Amortization schedule</h2>
+  <div class="rangebar">
+    <a href="{{ toggle_base }}schedule=annual"
+       {% if schedule_view == 'annual' %}aria-current="page"{% endif %}>Annual</a>
+    <a href="{{ toggle_base }}schedule=monthly"
+       {% if schedule_view == 'monthly' %}aria-current="page"{% endif %}>Monthly</a>
+  </div>
+</div>
+
+{% if schedule_view == 'annual' %}
+<table class="tight">
+  <thead>
+    <tr><th scope="col">Year</th>
+        <th scope="col" class="right n">Interest</th>
+        <th scope="col" class="right n">Principal</th>
+        <th scope="col" class="right n">Ending balance</th></tr>
+  </thead>
+  <tbody>
+    {% for year in annual %}
+    <tr>
+      <td>{{ year.year }}{% if year.payments != 12 %}
+        <span class="cs">({{ year.payments }} payment{{ 's' if year.payments != 1 }})</span>{% endif %}</td>
+      <td class="right n">{{ year.interest_cents | money }}</td>
+      <td class="right n">{{ year.principal_cents | money }}</td>
+      <td class="right n">{{ year.balance_cents | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<table class="tight">
+  <thead>
+    <tr><th scope="col">Payment</th>
+        <th scope="col" class="right n">Amount</th>
+        <th scope="col" class="right n">Interest</th>
+        <th scope="col" class="right n">Principal</th>
+        <th scope="col" class="right n">Ending balance</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.period }}</td>
+      <td class="right n">{{ row.payment_cents | money }}</td>
+      <td class="right n">{{ row.interest_cents | money }}</td>
+      <td class="right n">{{ row.principal_cents | money }}</td>
+      <td class="right n">{{ row.balance_cents | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="muted">
+  {{ rows | length }} payments. The last one is
+  {{ rows[-1].payment_cents | money }} rather than
+  {{ rows[0].payment_cents | money }}, which is how the balance reaches exactly
+  zero instead of a few cents either side of it.
+</p>
+{% endif %}

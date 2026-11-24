@@ -1,0 +1,22 @@
+{% if pending_paycheck %}
+<div class="payday">
+  <div class="pd-head">
+    <span class="bg">Payday</span>
+    <span class="tx">Confirm your paycheck
+      <em>Posted as {{ pending_paycheck.amount_cents | money }} on
+          {{ pending_paycheck.txn_date }}. If you were paid something else,
+          put the real figure in and this month's numbers catch up.</em></span>
+  </div>
+  <form method="post" action="{{ url_for('paycheck.confirm') }}" class="inline-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="txn_id" value="{{ pending_paycheck.id }}">
+    <label class="stack-label">
+      <span>Amount paid</span>
+      <input type="text" name="amount" inputmode="decimal" required
+             aria-label="Amount actually paid"
+             value="{{ '%.2f' | format(pending_paycheck.amount_cents / 100) }}">
+    </label>
+    <button type="submit">Confirm</button>
+  </form>
+</div>
+{% endif %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Devices{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">Security</div>
+    <h1>Remembered devices</h1>
+  </div>
+</div>
+<p class="muted">
+  Each of these can open the app without the password until it expires. Revoke
+  one if you lose the device it belongs to.
+</p>
+
+{% if devices %}
+<table class="rows">
+  <thead>
+    <tr><th>Device</th><th>Last used</th><th>Expires</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for device in devices %}
+    <tr>
+      <td>{{ device.label }}</td>
+      <td>{{ device.last_seen_at[:10] }}</td>
+      <td>{{ device.expires_at[:10] }}</td>
+      <td>
+        <form method="post"
+              action="{{ url_for('auth.revoke_device', device_id=device.id) }}">
+          {{ csrf_field() }}
+          <button type="submit" class="secondary">Revoke</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No devices are remembered. Tick "remember this device" when you log in.</p>
+{% endif %}
+{% endblock %}

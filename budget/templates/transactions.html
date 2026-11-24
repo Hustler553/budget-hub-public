@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+{% block title %}Transactions{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ month_name }} ·
+      {{ total }}{{ ' matching' if filtered }}
+      transaction{{ 's' if total != 1 }}</div>
+    <h1>Transactions</h1>
+  </div>
+  <div class="acts">
+    {% if month %}
+    <a href="{{ url_for('transactions.index', month=prev_month, **kept) }}"
+       class="button secondary">← {{ prev_month }}</a>
+    <a href="{{ url_for('transactions.index', month=next_month, **kept) }}"
+       class="button secondary">{{ next_month }} →</a>
+    {% else %}
+    <a href="{{ url_for('transactions.index', month=this_month, **kept) }}"
+       class="button secondary">This month</a>
+    {% endif %}
+    {% if month or shown.get('from') or shown.get('to') %}
+    <a href="{{ url_for('transactions.index', **kept) }}"
+       class="button secondary">All time</a>
+    {% endif %}
+  </div>
+</div>
+
+<details class="card addbox" id="add">
+  <summary>Add a transaction, or import a CSV</summary>
+
+  <form method="post" action="{{ url_for('transactions.add') }}" class="form-row" data-inplace>
+    {{ csrf_field() }}
+    <label>Date <input type="date" name="date" value="{{ today }}" required></label>
+    <label>Type
+      <select name="kind">
+        <option value="expense">Expense</option>
+        <option value="income">Income</option>
+      </select>
+    </label>
+    <label>Amount <input type="text" name="amount" placeholder="12.34" required inputmode="decimal"></label>
+    <label>Merchant / who <input type="text" name="merchant" placeholder="e.g. Kroger, Venmo - Sam"></label>
+    <label>Category
+      <select name="category_id">
+        <option value="">(auto / none)</option>
+        {% for c in categories %}
+          <option value="{{ c.id }}">{{ c.name }}{{ ' (income)' if c.kind == 'income' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Account
+      <select name="account_id">
+        <option value="">Unassigned</option>
+        {% for a in account_choices %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Note <input type="text" name="note"></label>
+    <button type="submit">Add</button>
+  </form>
+
+  <hr class="soft">
+
+  <form method="post" action="{{ url_for('transactions.import_csv') }}"
+        enctype="multipart/form-data" class="inline-form">
+    {{ csrf_field() }}
+    <strong>Import a CSV from your bank:</strong>
+    <input type="file" name="csv_file" accept=".csv" required>
+    <button type="submit" class="secondary">Import</button>
+    <span class="muted">Any bank's export: you will be asked which column is
+      which, once per bank. Duplicates are skipped, so re-importing is safe.</span>
+  </form>
+</details>
+
+{% if uncategorized %}
+<div class="card" style="border-color:var(--warn)">
+  <h2>Needs a category ({{ uncategorized | length }})</h2>
+  <p class="muted">Pick a category once — with “remember” checked, future transactions
+     from the same merchant are categorized automatically.</p>
+  <table class="stack stack-cat">
+    {% for t in uncategorized %}
+    <tr>
+      <td class="muted nowrap">{{ t.txn_date }}</td>
+      <td>{{ t.merchant or t.note or '—' }}</td>
+      <td class="right {{ 'pos' if t.amount_cents > 0 else 'neg' }}">{{ t.amount_cents | money_signed }}</td>
+      <td>
+        <form method="post" action="{{ url_for('transactions.categorize', txn_id=t.id) }}" class="inline-form" data-inplace>
+          {{ csrf_field() }}
+          <select name="category_id" required>
+            <option value="">Choose…</option>
+            {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+          </select>
+          <label class="checkbox"><input type="checkbox" name="remember" checked> remember</label>
+          <button type="submit">Save</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+{% if review_emails %}
+<div class="card" id="review" style="border-color:var(--warn)">
+  <h2>Emails needing review ({{ review_emails | length }})</h2>
+  <p class="muted">These look like bank alerts but couldn’t be fully parsed.
+     Fill in what’s missing to import them, or dismiss.</p>
+  {% for e in review_emails %}
+  <div class="review-item">
+    <div class="review-head">
+      <strong>{{ e.subject or '(no subject)' }}</strong>
+      <span class="muted">{{ e.sender }} · {{ e.received_at }}</span>
+    </div>
+    <details><summary>Show email text</summary><pre>{{ e.body_snippet }}</pre></details>
+    <form method="post" action="{{ url_for('transactions.review_accept', log_id=e.id) }}" class="inline-form" data-inplace>
+      {{ csrf_field() }}
+      <input type="text" name="amount" placeholder="Amount" required inputmode="decimal"
+             value="{{ '%.2f' | format(e.amount_cents / 100) if e.amount_cents }}">
+      <input type="text" name="merchant" placeholder="Merchant" value="{{ e.merchant or '' }}">
+      <select name="category_id">
+        <option value="">(auto / none)</option>
+        {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+      <button type="submit">Import</button>
+    </form>
+    <form method="post" action="{{ url_for('transactions.review_dismiss', log_id=e.id) }}" class="inline-form" data-inplace>
+      {{ csrf_field() }}
+      <button type="submit" class="secondary">Dismiss</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if pending_rows %}
+<div class="card" id="pending">
+  <h2>Pending ({{ pending_rows | length }})</h2>
+  <p class="muted">
+    Authorized by your bank but not settled yet, so they are <strong>not</strong>
+    counted in {{ pending_month_name }}&rsquo;s spending.
+    {%- if pending_cents %} They would add {{ pending_cents | money }}.{% endif %}
+    Amounts can still change before they post &mdash; a fuel pump or a
+    restaurant tab often holds more than it finally takes.
+  </p>
+  <table class="stack stack-cat">
+    {% for p in pending_rows %}
+    <tr>
+      <td class="muted nowrap">{{ p.txn_date }}</td>
+      <td>{{ p.merchant or '—' }} <span class="tag">pending</span></td>
+      <td class="muted">{{ p.account_name or '—' }}</td>
+      <td class="right {{ 'pos' if p.amount_cents > 0 else 'neg' }}">{{ p.amount_cents | money_signed }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="list-header">
+    <h2>{{ month_name }}</h2>
+    {% if total %}
+    <span class="muted n ledger-sum">In {{ money_in | money }} · Out {{ money_out | abs | money }}</span>
+    {% endif %}
+  </div>
+  <div class="list-header">
+    <form method="get" class="inline-form filters">
+      {% if month %}<input type="hidden" name="month" value="{{ month }}">{% endif %}
+      <input type="search" name="q" placeholder="Search merchant or note" value="{{ search }}"
+             aria-label="Search merchant or note">
+      <select name="category" aria-label="Category">
+        <option value="">All categories</option>
+        <option value="none" {{ 'selected' if category_filter == 'none' }}>Uncategorized</option>
+        {% for c in categories %}
+          <option value="{{ c.id }}" {{ 'selected' if category_filter == c.id | string }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="account" aria-label="Account">
+        <option value="">All accounts</option>
+        <option value="none" {{ 'selected' if account_filter == 'none' }}>Unassigned</option>
+        {% for a in account_choices %}
+          <option value="{{ a.id }}" {{ 'selected' if account_filter == a.id | string }}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+      {% if all_tags %}
+      <label for="tagf" class="visually-hidden">Tag</label>
+      <select name="tag" id="tagf">
+        <option value="">Any tag</option>
+        {% for tg in all_tags %}
+          <option value="{{ tg.name }}" {{ 'selected' if tag_filter == tg.name }}>
+            {{ tg.name }} ({{ tg.n }})</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+      <label class="checkbox">
+        <input type="checkbox" name="reviewed" value="no"
+               {{ 'checked' if unreviewed_only }}>
+        Unreviewed only{% if unreviewed_count %} ({{ unreviewed_count }}){% endif %}
+      </label>
+      <details class="morefilters" {{ 'open' if shown.get('min') or shown.get('max') or shown.get('from') or shown.get('to') }}>
+        <summary>Amount and dates</summary>
+        <span class="inline-form">
+          <label>From <input type="date" name="from" value="{{ shown.get('from', '') }}"></label>
+          <label>To <input type="date" name="to" value="{{ shown.get('to', '') }}"></label>
+          <label>At least <input type="text" name="min" inputmode="decimal" size="7"
+                                 placeholder="0.00" value="{{ shown.get('min', '') }}"></label>
+          <label>At most <input type="text" name="max" inputmode="decimal" size="7"
+                                placeholder="0.00" value="{{ shown.get('max', '') }}"></label>
+        </span>
+      </details>
+      <button type="submit" class="secondary">Filter</button>
+      {% if filtered or shown.get('from') or shown.get('to') %}
+      <a href="{{ url_for('transactions.index', month=month or none) }}">Clear</a>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if rows %}
+  <form method="post" action="{{ url_for('transactions.bulk') }}" id="bulkform"
+        class="bulkbar" data-bulkbar data-inplace>
+    {{ csrf_field() }}
+    <span class="muted bulkcount" data-bulkcount>Tick rows to act on them</span>
+    <select name="bulk_category_id" aria-label="Category to apply">
+      <option value="">Category…</option>
+      {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+    </select>
+    <button type="submit" name="action" value="categorize" class="secondary">Set category</button>
+    <input type="text" name="bulk_tags" placeholder="tag, tag" aria-label="Tags to add"
+           size="12">
+    <button type="submit" name="action" value="tag" class="secondary">Add tags</button>
+    <button type="submit" name="action" value="review" class="secondary">Mark reviewed</button>
+    <button type="submit" name="action" value="unreview" class="secondary">Unmark</button>
+    <button type="submit" name="action" value="delete" class="secondary danger"
+            onclick="return confirm('Delete the ticked transactions? This cannot be undone.');"
+            >Delete</button>
+  </form>
+
+  <table class="stack stack-txns">
+    <thead><tr>
+      <th class="pick"><input type="checkbox" data-bulkall aria-label="Select every row"></th>
+      <th>Date</th><th>Merchant</th><th>Category</th><th>Account</th>
+      <th class="right">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for t in rows %}
+      <tr class="{{ 'reviewed' if t.reviewed }}">
+        <td class="pick"><input type="checkbox" form="bulkform" name="selected"
+                                value="{{ t.id }}" data-bulkpick
+                                aria-label="Select {{ t.merchant or t.txn_date }}"></td>
+        <td class="muted nowrap">{{ t.txn_date }}
+          {%- if t.reviewed %} <span class="tick" title="Reviewed">✓</span>{% endif %}
+        </td>
+        <td>{{ t.merchant or t.note or '—' }} <span class="tag">{{ t.source }}</span>
+          {%- for name in row_tags.get(t.id, []) %}
+          <a class="tag tagpill"
+             href="{{ url_for('transactions.index', month=month or none, tag=name) }}">{{ name }}</a>
+          {%- endfor %}
+        </td>
+        <td {% if not split_marks.get(t.id) %}data-cat data-category="{{ t.category_id or '' }}"
+            data-action="{{ url_for('transactions.categorize', txn_id=t.id) }}"{% endif %}>
+          {%- if split_marks.get(t.id) %}
+            <span class="tag paid">Split · {{ split_marks[t.id] }}</span>
+          {%- elif t.category_name %}
+            <span class="nameline">{{ glyph(t.cat_icon, t.cat_colour, size='sm')
+              }}{{ t.category_name }}</span>
+          {%- else %}—{% endif %}
+        </td>
+        <td class="muted">{{ t.account_name or '—' }}</td>
+        <td class="right {{ 'pos' if t.amount_cents > 0 else 'neg' }}">{{ t.amount_cents | money_signed }}</td>
+        <td class="nowrap actions">
+          <a href="{{ url_for('transactions.edit', txn_id=t.id) }}" data-panel>edit</a>
+          <form method="post" action="{{ url_for('transactions.delete', txn_id=t.id) }}" class="inline-form" data-inplace
+                onsubmit="return confirm('Delete this transaction?');">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if pages > 1 %}
+  <nav class="pager" aria-label="Pages">
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    <span>
+      {% if page > 1 %}
+      <a href="{{ url_for('transactions.index', page=page - 1, **shown) }}">← Newer</a>
+      {% endif %}
+      {% if page < pages %}
+      <a href="{{ url_for('transactions.index', page=page + 1, **shown) }}">Older →</a>
+      {% endif %}
+    </span>
+  </nav>
+  {% endif %}
+  {% else %}
+  <p class="muted">No transactions match.</p>
+  {% endif %}
+</div>
+
+<template id="catoptions">
+  <select class="catselect" aria-label="Category">
+    <option value="">—</option>
+    {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+  </select>
+</template>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='bulk-select.js') }}" defer></script>
+<script src="{{ url_for('static', filename='inplace.js') }}" defer></script>
+{% endblock %}

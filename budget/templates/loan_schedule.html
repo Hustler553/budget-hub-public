@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ loan.name }} schedule{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow"><a href="{{ url_for('moneymath.loans_page') }}">Loans</a></div>
+    <h1>{{ loan.name }}</h1>
+  </div>
+</div>
+
+<div class="card">
+  <div class="brow">
+    <div><div class="cn">Still owing</div>
+      <div class="cs">{{ loan.annual_rate_e4 | rate_e4 }}% a year ·
+        {{ loan.payment_cents | money }} a month, principal and interest
+        {%- if loan.extra_cents %} · {{ loan.extra_cents | money }} extra{% endif %}
+        {%- if loan.balance_source == 'lender' %} · balance from your lender
+          {%- if loan.balance_as_of %}, {{ loan.balance_as_of }}{% endif %}
+        {%- elif loan.balance_as_of %} · balance as you set it
+          {{ loan.balance_as_of }}{% endif %}</div></div>
+    <span class="lf n o">{{ loan.balance_cents | money }}</span>
+  </div>
+  {% if model.impossible %}
+  <p class="muted">{{ model.impossible }}</p>
+  {% else %}
+  <div class="brow">
+    <div><div class="cn">Interest still to pay</div>
+      <div class="cs">over {{ model.periods }} payments, {{ model.years }} years</div></div>
+    <span class="lf n o">{{ model.total_interest_cents | money }}</span>
+  </div>
+  {% if loan.escrow_cents %}
+  <p class="muted">
+    The schedule below is the loan alone. {{ loan.escrow_cents | money }} of
+    escrow each month pays taxes and insurance and never touches the balance,
+    so the cheque that leaves your account is
+    {{ model.monthly_outlay_cents | money }}.
+  </p>
+  {% endif %}
+  {% endif %}
+</div>
+
+{% if not model.impossible %}
+<div class="card">
+  {% set toggle_base = url_for('moneymath.loans_schedule', loan_id=loan.id) ~ '?' %}
+  {% with rows = model.schedule %}
+    {% include "_schedule.html" %}
+  {% endwith %}
+</div>
+{% endif %}
+
+{% endblock %}

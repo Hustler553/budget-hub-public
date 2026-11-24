@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Savings projector{% endblock %}
+{% block content %}
+
+<div class="eyebrow">Calculators</div>
+<h1>Savings projector</h1>
+
+<div class="card">
+  <p class="muted">
+    What regular saving grows into. This reads none of your accounts and
+    changes nothing — it is arithmetic on the four numbers below, so you can
+    put anything in it, including money you have not saved yet.
+  </p>
+
+  <form method="get" action="{{ url_for('moneymath.projector') }}" class="form-row">
+    <label>Starting with
+      <input type="text" name="initial" inputmode="decimal"
+             value="{{ fields.initial }}"></label>
+    <label>Each month
+      <input type="text" name="monthly" inputmode="decimal"
+             value="{{ fields.monthly }}"></label>
+    <label>Return a year
+      <input type="text" name="rate" inputmode="decimal"
+             value="{{ fields.rate }}"></label>
+    <label>For how many years
+      <input type="text" name="years" inputmode="numeric" size="4"
+             value="{{ fields.years }}"></label>
+    <label>Interest added
+      <select name="compounding">
+        {% for key, label in compounding_labels.items() %}
+        <option value="{{ key }}"{{ ' selected' if key == compounding }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Paid in at the
+      <select name="timing">
+        <option value="end"{{ ' selected' if not at_start }}>end of the month</option>
+        <option value="start"{{ ' selected' if at_start }}>start of the month</option>
+      </select>
+    </label>
+    <button type="submit">Work it out</button>
+  </form>
+  <p class="muted">
+    <strong>{{ fields.rate }}% a year</strong> means exactly that: with interest
+    added {{ compounding_labels[compounding] }}, a year's growth comes to
+    {{ fields.rate }}%. Adding it more often compounds the same rate into more
+    — monthly turns 7% into 7.23% a year — so the figure here moves with this
+    setting, and other calculators may assume a different one.
+    Paying in at the start of the month earns one extra month of growth on
+    every contribution. Over a long term that is not a rounding difference.
+    {% if years >= max_years %}
+    This projects at most {{ max_years }} years.{% endif %}
+  </p>
+</div>
+
+<div class="card">
+  <h2>After {{ years }} year{{ 's' if years != 1 }}</h2>
+  <div class="brow">
+    <div><div class="cn">Worth</div>
+      <div class="cs">what it all adds up to</div></div>
+    <span class="lf n">{{ final.balance_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">You put in</div>
+      <div class="cs">the starting amount plus every contribution</div></div>
+    <span class="lf n">{{ final.paid_in_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">It earned</div>
+      <div class="cs">growth on top of what you put in</div></div>
+    <span class="lf n{{ ' o' if final.earned_cents < 0 }}">{{ final.earned_cents | money }}</span>
+  </div>
+
+  {% if crossover %}
+  <p class="muted">
+    From month <strong>{{ crossover.period }}</strong> —
+    year {{ (crossover.period / 12) | round(1) }} — the growth is worth more
+    than everything you have put in.
+  </p>
+  {% else %}
+  <p class="muted">
+    Over this term the contributions stay ahead of the growth. A longer term,
+    or a higher return, is where compounding overtakes what you pay in.
+  </p>
+  {% endif %}
+</div>
+
+{% if milestones %}
+<div class="card">
+  <h2>Year by year</h2>
+  <table class="tight">
+    <thead>
+      <tr><th scope="col">Year</th>
+          <th scope="col" class="right n">Put in</th>
+          <th scope="col" class="right n">Earned</th>
+          <th scope="col" class="right n">Worth</th></tr>
+    </thead>
+    <tbody>
+      {% for row in milestones %}
+      <tr>
+        <td>{{ (row.period / 12) | int }}</td>
+        <td class="right n">{{ row.paid_in_cents | money }}</td>
+        <td class="right n">{{ row.earned_cents | money }}</td>
+        <td class="right n">{{ row.balance_cents | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

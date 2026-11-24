@@ -1,0 +1,52 @@
+<svg class="chart nw" viewBox="0 0 620 200" role="img"
+     aria-label="{{ nw_label | default('Net worth') }} over the last {{ nw_summary.days }} day{{ 's' if nw_summary.days != 1 }}, from {{ nw_summary.first | money }} to {{ nw_summary.last | money }}.">
+  <line class="grid" x1="44" y1="10" x2="614" y2="10"></line>
+  <line class="grid" x1="44" y1="48.75" x2="614" y2="48.75"></line>
+  <line class="grid" x1="44" y1="87.5" x2="614" y2="87.5"></line>
+  <line class="grid" x1="44" y1="126.25" x2="614" y2="126.25"></line>
+  <line class="grid" x1="44" y1="165" x2="614" y2="165"></line>
+
+  <defs>
+    <linearGradient id="nwfade" x1="0" y1="0" x2="0" y2="1">
+      <stop class="nwfade-top" offset="0"></stop>
+      <stop class="nwfade-bottom" offset="1"></stop>
+    </linearGradient>
+  </defs>
+
+  <path class="nwarea" d="{{ nw_chart.area }}"></path>
+  <polyline class="nwline" points="{{ nw_chart.line }}"></polyline>
+
+  {% if nw_chart.zero_y is not none %}
+  <line class="nwzero" x1="44" y1="{{ nw_chart.zero_y }}"
+        x2="614" y2="{{ nw_chart.zero_y }}"></line>
+  <text class="nwzerolab" x="40" y="{{ nw_chart.zero_y + 3.5 }}">$0</text>
+  {% endif %}
+
+  {% if nw_chart.dots %}
+    {% for p in nw_chart.points %}
+    <circle class="netdot {{ 'netnow' if loop.last }}"
+            cx="{{ p.x }}" cy="{{ p.y }}" r="{{ 4.2 if loop.last else 3 }}"></circle>
+    {% endfor %}
+  {% else %}
+    <circle class="netdot netnow" cx="{{ nw_chart.points[-1].x }}"
+            cy="{{ nw_chart.points[-1].y }}" r="4.2"></circle>
+  {% endif %}
+
+  {% for l in nw_chart.labels %}
+  <text class="xlab" x="{{ l.x }}" y="192">{{ l.text }}</text>
+  {% endfor %}
+</svg>
+
+<div class="stats">
+  <div><div class="l">Change</div>
+    <div class="v n {{ 'neg' if nw_summary.change < 0 else 'pos' }}">{{ nw_summary.change | money_signed }}</div>
+    <div class="d">over {{ nw_summary.days }} day{{ 's' if nw_summary.days != 1 }}</div></div>
+  <div><div class="l">Started at</div><div class="v n">{{ nw_summary.first | money }}</div>
+    <div class="d">first snapshot in view</div></div>
+  <div><div class="l">High</div><div class="v n">{{ nw_summary.high | money }}</div>
+    <div class="d">peak in this window</div></div>
+  <div><div class="l">Low</div><div class="v n">{{ nw_summary.low | money }}</div>
+    <div class="d">trough in this window</div></div>
+  <div class="tk"><div class="l">Now</div><div class="v n">{{ nw_summary.last | money }}</div>
+    <div class="d">across {{ nw_summary.accounts }} account{{ 's' if nw_summary.accounts != 1 }}</div></div>
+</div>

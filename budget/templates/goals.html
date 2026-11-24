@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Goals{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ goals | length }} goal{{ 's' if goals | length != 1 }}</div>
+    <h1>Goals</h1>
+  </div>
+</div>
+
+{% for g in goals %}
+<div class="card goal" id="goal-{{ g.id }}">
+  <div class="dh">
+    <h2>{{ g.name }}</h2>
+    <span class="muted">
+      {% if not g.linked %}no account linked
+      {% else %}in {{ g.account_name }}{{ ' (archived)' if g.account_archived }}{% endif %}
+    </span>
+  </div>
+
+  <div class="goalfig">
+    <span class="v n">{{ g.saved | money }}</span>
+    <span class="muted n">of {{ g.target_cents | money }}</span>
+    {% if g.reached %}<span class="tag paid">reached</span>
+    {% elif g.on_track is sameas true %}<span class="tag paid">on track</span>
+    {% elif g.on_track is sameas false %}<span class="tag behind">behind</span>{% endif %}
+  </div>
+  <span class="sharebar wide" role="img" aria-label="{{ g.percent }} percent of the way">
+    <span style="width:{{ g.percent }}%"></span>
+  </span>
+
+  <p class="muted note">
+    {% if not g.linked %}
+      The account this goal was saved in has been deleted, so there is no
+      balance to measure it by. Remove it and make it again against another
+      account.
+    {% elif g.reached %}
+      {{ g.percent }}% — the target is met.
+    {% else %}
+      {{ g.percent }}% of the way, {{ g.remaining | money }} to go.
+      {% if g.target_date %}
+        {% if g.months_left == 0 %}
+          The date ({{ g.target_date }}) has passed.
+        {% else %}
+          Due {{ g.target_date }}{% if g.needed_monthly %}: that needs about
+          {{ g.needed_monthly | money }} a month{% endif %}.
+        {% endif %}
+      {% endif %}
+      {% if g.recent_monthly is not none %}
+        Over the last month the account
+        {% if g.recent_monthly > 0 %}grew by {{ g.recent_monthly | money }}.
+        {% elif g.recent_monthly < 0 %}fell by {{ g.recent_monthly | abs | money }}.
+        {% else %}did not change.{% endif %}
+      {% endif %}
+    {% endif %}
+    {% if g.start_cents %}
+      Counts what has been added since {{ g.created_on }};
+      the {{ g.start_cents | money }} already there does not count.
+    {% endif %}
+  </p>
+
+  <form method="post" action="{{ url_for('reports.goal_delete', goal_id=g.id) }}"
+        class="inline-form"
+        onsubmit="return confirm('Remove this goal? The account and its money are not touched.');">
+    {{ csrf_field() }}
+    <button type="submit" class="linklike">remove</button>
+  </form>
+</div>
+{% endfor %}
+
+<div class="card" id="add">
+  <h2>Add a goal</h2>
+  <p class="muted">
+    A goal is a target for one account — an emergency fund in a savings
+    account, a deposit in another. Progress is read from the account's
+    balance, so it keeps itself up to date as the balance does.
+    {% if not account_choices %}
+    <strong>Add a savings or current account on the
+    <a href="{{ url_for('accounts.index') }}">Accounts</a> page first.</strong>
+    {% endif %}
+  </p>
+  {% if account_choices %}
+  <form method="post" action="{{ url_for('reports.goal_add') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Name <input type="text" name="name" placeholder="Emergency fund" required></label>
+    <label>Target <input type="text" name="target" inputmode="decimal" placeholder="10000.00" required></label>
+    <label>Saved in
+      <select name="account_id" required>
+        <option value="">Choose…</option>
+        {% for a in account_choices %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>By <span class="muted">(optional)</span>
+      <input type="date" name="target_date" min="{{ today }}">
+    </label>
+    <label>What is already in the account
+      <select name="count_existing">
+        <option value="yes">counts towards it</option>
+        <option value="no">does not count — start from now</option>
+      </select>
+    </label>
+    <button type="submit">Add goal</button>
+  </form>
+  {% endif %}
+  <p class="muted">Budgeting a monthly amount towards something is a different
+     thing, and lives on the <a href="{{ url_for('budget.index') }}">Budget</a>
+     page as a category's goal.</p>
+</div>
+{% endblock %}

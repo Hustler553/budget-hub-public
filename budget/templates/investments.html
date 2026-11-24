@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Investments{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ totals.count }} holding{{ 's' if totals.count != 1 }}
+      across {{ by_account | length }} account{{ 's' if by_account | length != 1 }}</div>
+    <h1>Investments</h1>
+  </div>
+</div>
+
+{% if not held and nw_chart.points | length < 2 %}
+<div class="card">
+  <h2>Nothing to show yet</h2>
+  <p class="muted">
+    {% if has_accounts %}
+    Your investment account has no holdings recorded and not enough balance
+    history to draw. Its value is charted here from the balance recorded each
+    night, so a line appears after a second night.
+    {% else %}
+    This page fills in from investment accounts. Connect a brokerage under
+    <a href="{{ url_for('settings.index', section='connections') }}#plaid">Settings</a>
+    to see what it holds, or add an account of kind “investment” on the
+    <a href="{{ url_for('accounts.index') }}">Accounts</a> page and keep its
+    balance up to date — its value over time will chart here.
+    {% endif %}
+  </p>
+</div>
+{% else %}
+
+{% if held %}
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Value</div>
+    <div class="v n">{{ totals.value | money }}</div>
+    <div class="d">as your institutions last priced it</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Paid for it</div>
+    <div class="v n">{{ totals.cost | money if totals.gain is not none else '—' }}</div>
+    <div class="d">
+      {% if totals.gain is none %}cost basis not reported
+      {% elif totals.uncosted %}{{ totals.uncosted }} holding{{ 's' if totals.uncosted != 1 }} left out: no cost reported
+      {% else %}cost basis of every holding{% endif %}
+    </div>
+  </div>
+  <div class="statcard">
+    <div class="l">Gain</div>
+    {% if totals.gain is not none %}
+    <div class="v n {{ 'o' if totals.gain < 0 else 'g' }}">{{ totals.gain | money_signed }}</div>
+    <div class="d">{% if totals.gain_percent is not none %}{{ '%+.1f' | format(totals.gain_percent) }}% on what was paid{% endif %}</div>
+    {% else %}
+    <div class="v n">—</div>
+    <div class="d">needs a cost basis to work out</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if nw_chart.points | length > 1 %}
+<div class="card">
+  <div class="dh">
+    <h2>Value over time</h2>
+    <div class="rangebar">
+      {% for r in nw_ranges %}
+      <a href="{{ url_for('reports.investments_page', range=r) }}"
+         {{ 'aria-current=page' if r == nw_range }}>{{ r | upper }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% include "_networth_chart.html" %}
+  <p class="muted note">This is what the accounts were worth each night, not a
+     rate of return: it moves when the market does and also when you pay
+     money in or take it out.</p>
+</div>
+{% endif %}
+
+{% if held %}
+<div class="card">
+  <h2>What it is in</h2>
+  <table class="stack">
+    <thead><tr><th>Kind</th><th>Share</th><th class="right n">Value</th></tr></thead>
+    <tbody>
+      {% for row in allocation %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td>
+          <span class="sharebar" role="img" aria-label="{{ row.share }} percent">
+            <span style="width:{{ row.share }}%"></span>
+          </span>
+          <span class="muted n">{{ row.share }}%</span>
+        </td>
+        <td class="right n">{{ row.value | money_signed if row.value < 0 else row.value | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Holdings</h2>
+  <table class="stack holdings-all">
+    <thead><tr>
+      <th>Holding</th><th>Account</th>
+      <th class="right n">Quantity</th><th class="right n">Value</th>
+      <th class="right n">Paid</th><th class="right n">Gain</th>
+    </tr></thead>
+    <tbody>
+      {% for h in held %}
+      <tr>
+        <td>{% if h.ticker %}<strong>{{ h.ticker }}</strong> {% endif %}{{ h.name }}
+          <span class="tag">{{ h.type_label }}</span></td>
+        <td class="muted">{{ h.account_name }}</td>
+        <td class="right n">{{ h.quantity_e8 | qty }}</td>
+        <td class="right n">{{ h.value_cents | money if h.value_cents is not none else '—' }}</td>
+        <td class="right n muted">{{ h.cost_basis_cents | money if h.cost_basis_cents is not none else '—' }}</td>
+        <td class="right n {{ '' if h.gain_cents is none else ('neg' if h.gain_cents < 0 else 'pos') }}">
+          {% if h.gain_cents is not none %}{{ h.gain_cents | money_signed }}
+            {%- if h.gain_percent is not none %} <span class="muted">({{ '%+.1f' | format(h.gain_percent) }}%)</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

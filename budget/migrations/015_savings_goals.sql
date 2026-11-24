@@ -1,0 +1,2 @@
+ALTER TABLE categories ADD COLUMN goal_cents INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE categories ADD COLUMN goal_date TEXT;

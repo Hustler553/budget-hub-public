@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ row.name }} — icon and colour{% endblock %}
+
+{% set auto_colour = glyphs.colour_for(row.name) %}
+{% set auto_icon = glyphs.icon_for(row.name, kind=row.kind) %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ noun }}</div>
+    <h1>{{ row.name }}</h1>
+  </div>
+  <div>
+    {{ glyph(row.icon or auto_icon, row.colour or auto_colour, size='lg',
+             label='Current icon for ' ~ row.name) }}
+  </div>
+</div>
+
+<p class="muted">
+  Leave either on <b>Automatic</b> and it follows the name — so renaming this
+  {{ noun | lower }} keeps its look sensible instead of carrying the colour of
+  a word that is no longer there. Choosing one pins it until you change it
+  back.
+</p>
+
+<form method="post" class="card">
+  {{ csrf_field() }}
+  <input type="hidden" name="next" value="{{ back }}">
+
+  <h2>Colour</h2>
+  <div class="glpick">
+    <input type="radio" name="colour" value="" id="c-auto"
+           {% if not row.colour %}checked{% endif %}>
+    <label for="c-auto" title="Automatic — follows the name">
+      <span class="sw h-{{ auto_colour }}"></span>
+      <span class="visually-hidden">Automatic</span>
+    </label>
+    {% for hue in glyphs.HUES %}
+    <input type="radio" name="colour" value="{{ hue }}" id="c-{{ hue }}"
+           {% if row.colour == hue %}checked{% endif %}>
+    <label for="c-{{ hue }}" title="{{ hue }}">
+      <span class="sw h-{{ hue }}"></span>
+      <span class="visually-hidden">{{ hue }}</span>
+    </label>
+    {% endfor %}
+  </div>
+  <p class="glpick-note">The first swatch is Automatic, currently
+    {{ auto_colour }}.</p>
+
+  <h2>Icon</h2>
+  <div class="glpick">
+    <input type="radio" name="icon" value="" id="i-auto"
+           {% if not row.icon %}checked{% endif %}>
+    <label for="i-auto" title="Automatic — follows the name">
+      {{ glyph(auto_icon, row.colour or auto_colour, size='sm') }}
+      <span class="visually-hidden">Automatic</span>
+    </label>
+    {% for name in glyphs.ICONS | sort %}
+    <input type="radio" name="icon" value="{{ name }}" id="i-{{ name }}"
+           {% if row.icon == name %}checked{% endif %}>
+    <label for="i-{{ name }}" title="{{ name }}">
+      {{ glyph(name, row.colour or auto_colour, size='sm') }}
+      <span class="visually-hidden">{{ name }}</span>
+    </label>
+    {% endfor %}
+  </div>
+  <p class="glpick-note">The first icon is Automatic, currently
+    {{ auto_icon }}.</p>
+
+  <div class="actions">
+    <button type="submit">Save</button>
+    <a class="linklike" href="{{ back }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

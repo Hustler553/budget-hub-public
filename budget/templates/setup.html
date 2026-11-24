@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Set a password{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block layout %}
+<main class="page narrow">
+  {% include "_flash.html" %}
+  <h1>Set a password</h1>
+  <p class="muted">
+    This is your instance of the budget tool. The password is stored only as a
+    hash, so nobody can look it up for you — write it down somewhere safe. If
+    you do lose it, whoever set this up for you can reset it without touching
+    any of your data.
+  </p>
+  <form method="post">
+    {{ csrf_field() }}
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password"
+           autocomplete="new-password" required minlength="{{ min_length }}">
+    <label for="confirm">Type it again</label>
+    <input type="password" id="confirm" name="confirm"
+           autocomplete="new-password" required minlength="{{ min_length }}">
+    <p class="muted">At least {{ min_length }} characters.</p>
+    <button type="submit">Set password</button>
+  </form>
+</main>
+{% endblock %}

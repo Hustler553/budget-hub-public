@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Offline · Tally</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    padding: 2rem calc(1rem + env(safe-area-inset-left));
+    background: #F6F7F9; color: #11151B;
+    font: 16px/1.55 "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    text-align: center;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #11151B; color: #E7EAEE; }
+    .mark .ground { fill: #191F28; }
+  }
+  main { max-width: 26rem; }
+  .mark { width: 72px; height: 72px; margin: 0 0 1.5rem; }
+  h1 { font-size: 1.35rem; font-weight: 650; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  p { margin: 0 0 1rem; opacity: .78; }
+  .note {
+    font-size: .875rem; opacity: .62; margin-top: 1.75rem;
+    border-top: 1px solid currentColor; padding-top: 1rem;
+  }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    padding: .6rem 1.4rem; border-radius: .5rem;
+    border: 1px solid currentColor; background: transparent; color: inherit;
+  }
+</style>
+</head>
+<body>
+<main>
+  <svg class="mark" viewBox="0 0 48 48" aria-hidden="true">
+    <rect class="ground" width="48" height="48" rx="11" fill="#11151B"/>
+    <rect x="11" y="27" width="7" height="11" rx="2" fill="#FFFFFF" opacity=".55"/>
+    <rect x="21" y="22" width="7" height="16" rx="2" fill="#FFFFFF" opacity=".55"/>
+    <rect x="31" y="16" width="7" height="22" rx="2" fill="#41C08A"/>
+  </svg>
+
+  <h1>No connection</h1>
+  <p>
+    Tally could not reach the computer it keeps your money on. That machine has
+    to be switched on, and this device has to be on your tailnet.
+  </p>
+  <button onclick="location.reload()">Try again</button>
+
+  <p class="note">
+    Nothing is shown here on purpose. This app never stores your balances on a
+    phone, so there is no older copy to fall back to &mdash; and a figure from
+    some earlier hour, displayed as though it were current, would be worse than
+    this page.
+  </p>
+</main>
+</body>
+</html>

@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Accounts{% endblock %}
+{% block content %}
+
+{% macro account_row(a) %}
+{% set stated = a.balance_as_of is not none %}
+{% set owes = a.balance_cents < 0 or (a.balance_cents == 0 and not a.is_asset) %}
+<details class="cat account" id="account-{{ a.id }}"{{ ' open' if not stated }}>
+  <summary>
+    <div class="brow">
+      <div class="rowlead">
+        {{ glyph(a.icon, a.colour) }}
+        <div class="tx">
+          <div class="cn">{{ a.name }}</div>
+          <div class="cs">{{ a.kind | capitalize }}{% if a.institution %} · {{ a.institution }}{% endif %}{% if a.mask %} · ending {{ a.mask }}{% endif %}
+            {%- if not stated %} · <span class="cp w">No balance yet</span>{% endif %}</div>
+        </div>
+      </div>
+      {% set terms = liability_terms.get(a.id) %}
+      <div class="rl cs">{% if stated %}as of {{ a.balance_as_of }}{% endif %}
+        {%- if terms %}
+          {%- if terms.apr_bp is not none %} · {{ terms.apr_bp | rate }}% APR
+            {{- ' ' ~ terms.apr_type.replace('_apr', '').replace('_', ' ') if terms.apr_type }}{% endif %}
+          {%- if terms.next_payment_cents is not none %} ·
+            {{ terms.next_payment_cents | money }} due{% if terms.next_payment_due %}
+            {{ terms.next_payment_due }}{% endif %}{% endif %}
+          {%- if terms.ytd_interest_cents %} ·
+            {{ terms.ytd_interest_cents | money }} interest this year{% endif %}
+          {%- if terms.past_due_cents %} · <span class="cp o">{{ terms.past_due_cents | money }} past due</span>
+          {%- elif terms.is_overdue %} · <span class="cp o">Overdue</span>{% endif %}
+        {%- endif %}</div>
+      <span class="lf n{{ ' o' if a.balance_cents < 0 }}">{{ a.balance_cents | money if stated else '—' }}</span>
+    </div>
+  </summary>
+  <div class="catlist">
+    {% set held = holdings.get(a.id) %}
+    {% if held %}
+    <table class="holdings">
+      <caption class="cs">{{ held | length }} holding{{ 's' if held | length != 1 }}{%
+        if held[0].price_as_of %} · priced {{ held[0].price_as_of }}{% endif %}</caption>
+      <thead>
+        <tr><th scope="col">Holding</th><th scope="col" class="right n">Quantity</th>
+            <th scope="col" class="right n">Value</th></tr>
+      </thead>
+      <tbody>
+        {% for h in held %}
+        <tr>
+          <td>{% if h.ticker %}<strong>{{ h.ticker }}</strong> {% endif %}{{ h.name }}
+            {%- if h.security_type %}<span class="cs"> · {{ h.security_type }}</span>{% endif %}</td>
+          <td class="right n">{{ h.quantity_e8 | qty }}</td>
+          <td class="right n{{ ' o' if h.value_cents is not none and h.value_cents < 0 }}">
+            {{- h.value_cents | money if h.value_cents is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <form method="post" action="{{ url_for('accounts.update') }}" class="form-row">
+      {{ csrf_field() }}
+      <input type="hidden" name="account_id" value="{{ a.id }}">
+      <label>Name <input type="text" name="name" value="{{ a.name }}" required></label>
+      <label>Kind
+        <select name="kind">
+          {% for k in kinds %}
+          <option value="{{ k }}"{{ ' selected' if k == a.kind }}>{{ k | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Institution <input type="text" name="institution" value="{{ a.institution }}"></label>
+      <label>Last 4 digits <input type="text" name="mask" value="{{ a.mask }}" inputmode="numeric" size="6"></label>
+      <label>Balance <input type="text" name="balance" inputmode="decimal"
+                            value="{{ '%.2f' | format(a.balance_cents | abs / 100) if stated }}"></label>
+      <label class="checkbox"><input type="checkbox" name="owed"{{ ' checked' if owes }}> I owe this</label>
+      <button type="submit">Save</button>
+    </form>
+    <p class="muted"><a href="{{ url_for('settings.style_picker', kind='account',
+         row_id=a.id, next='/accounts#account-' ~ a.id) }}">Change its icon and
+      colour</a></p>
+    <form method="post" action="{{ url_for('accounts.archive') }}" class="inline-form"
+          onsubmit="return confirm('Archive this account? It stops counting toward net worth and leaves the account pickers. Its transactions keep it.');">
+      {{ csrf_field() }}
+      <input type="hidden" name="account_id" value="{{ a.id }}">
+      <button type="submit" class="secondary">Archive</button>
+    </form>
+  </div>
+</details>
+{% endmacro %}
+
+{% macro archived_row(a) %}
+<div class="cline account">
+  <span class="cn m">{{ a.name }}</span>
+  <span class="a n">{{ a.balance_cents | money if a.balance_as_of is not none else '—' }}</span>
+  <form method="post" action="{{ url_for('accounts.restore') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="account_id" value="{{ a.id }}">
+    <button type="submit" class="linkish">Restore</button>
+  </form>
+</div>
+{% endmacro %}
+
+<div class="phead">
+  <div>
+    {% set live = assets | length + liabilities | length %}
+    <div class="eyebrow">{{ live }} account{{ 's' if live != 1 }}</div>
+    <h1>Accounts</h1>
+  </div>
+  <div class="acts">
+    <a class="button" href="#add-account">Add an account</a>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Net worth</div>
+    <div id="net-worth" class="v n{{ ' neg' if net_worth_cents < 0 }}">{{ net_worth_cents | money }}</div>
+    <div class="d">What you own, minus what you owe</div>
+  </div>
+</div>
+
+<section class="card" id="net-worth-history">
+  <div class="dh">
+    <h2>Net worth over time</h2>
+    {% if nw_chart.points | length > 1 %}
+    <div class="rangebar">
+      {% for r in nw_ranges %}
+      <a href="{{ url_for('accounts.index', range=r) }}"
+         {{ 'aria-current=page' if r == nw_range }}>{{ r | upper }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if nw_chart.points | length > 1 %}
+    {% include "_networth_chart.html" %}
+  {% else %}
+  <div class="emptychart">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 3v18h18"></path><path d="M7 15l4-5 3 3 5-7"></path>
+    </svg>
+    <p class="t">{{ 'One snapshot so far' if nw_chart.points else 'No snapshots yet' }}</p>
+    <p class="d">Balances are recorded once a night, and the chart draws itself
+      in as they accrue — a week for a line, a month for a trend. Accounts with
+      no balance filled in are skipped, so they stay out of the history rather
+      than entering it as zero.</p>
+  </div>
+  {% endif %}
+</section>
+
+{% if needs_balance %}
+<div class="notice" id="needs-balance">
+  <strong>Needs a balance ({{ needs_balance | length }})</strong>
+  <p style="margin:6px 0 4px">These count as $0 in your net worth until you tell us what they are worth.</p>
+  <ul style="margin:0; padding-left:20px">
+    {% for a in needs_balance %}
+    <li><a href="#account-{{ a.id }}">{{ a.name }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<section class="card" id="assets">
+  <div class="dh">
+    <h2>Assets</h2>
+    <span id="assets-total" class="n{{ ' neg' if assets_total < 0 }}">{{ assets_total | money }}</span>
+  </div>
+  {% for a in assets %}{{ account_row(a) }}{% else %}
+  <p class="muted">Nothing here yet.</p>
+  {% endfor %}
+</section>
+
+<section class="card" id="liabilities">
+  <div class="dh">
+    <h2>Liabilities</h2>
+    <span id="liabilities-total" class="n{{ ' neg' if liabilities_total < 0 }}">{{ liabilities_total | money }}</span>
+  </div>
+  {% for a in liabilities %}{{ account_row(a) }}{% else %}
+  <p class="muted">Nothing here yet.</p>
+  {% endfor %}
+</section>
+
+<details class="card manage" id="add-account"{{ ' open' if not (assets or liabilities) }}>
+  <summary>Add an account</summary>
+  <form method="post" action="{{ url_for('accounts.create') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Name <input type="text" name="name" required></label>
+    <label>Kind
+      <select name="kind">
+        {% for k in kinds %}
+        <option value="{{ k }}">{{ k | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Institution <input type="text" name="institution"></label>
+    <label>Last 4 digits <input type="text" name="mask" inputmode="numeric" size="6"></label>
+    <label>Balance <input type="text" name="balance" inputmode="decimal" placeholder="optional"></label>
+    <label class="checkbox"><input type="checkbox" name="owed"> I owe this</label>
+    <button type="submit">Add account</button>
+  </form>
+  <p class="muted">Type what the account is worth to you. For a card or a loan, type what you
+     owe as a plain number and tick “I owe this”. If you do not know the balance yet, leave it
+     blank and the account stays at the top of this page until you give it one.</p>
+</details>
+
+{% if archived %}
+<details class="card manage" id="archived">
+  <summary>Archived ({{ archived | length }})</summary>
+  <p class="muted">Left out of net worth and out of the account pickers. Their transactions
+     keep them.</p>
+  {% for a in archived %}{{ archived_row(a) }}{% endfor %}
+</details>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">
+      {% if period == 'custom' %}
+        {{ start or 'the beginning' }} to {{ end or 'today' }}
+      {% else %}{{ periods[period][0] }}{% endif %}
+      · {{ report.count }} transaction{{ 's' if report.count != 1 }}
+    </div>
+    <h1>Reports</h1>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Spent</div>
+    <div class="v n">{{ report.spent | money }}</div>
+    <div class="d">transfers between your accounts left out</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Came in</div>
+    <div class="v n g">{{ report.income | money }}</div>
+    <div class="d">income and refunds</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Net</div>
+    <div class="v n {{ 'o' if report.income - report.spent < 0 else 'g' }}">{{ (report.income - report.spent) | money_signed }}</div>
+    <div class="d">in, less out</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="list-header">
+    <h2>By {{ groups[group] | lower }}</h2>
+    <div class="rangebar">
+      {% for key, label in groups.items() %}
+      <a href="{{ url_for('reports.index', by=key, **kept) }}"
+         {{ 'aria-current=page' if key == group }}>{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <form method="get" class="inline-form filters">
+    <input type="hidden" name="by" value="{{ group }}">
+    <select name="period" aria-label="Period">
+      {% for key, entry in periods.items() %}
+      <option value="{{ key }}" {{ 'selected' if key == period }}>{{ entry[0] }}</option>
+      {% endfor %}
+      {% if period == 'custom' %}<option value="" selected>Custom dates</option>{% endif %}
+    </select>
+    <select name="account" aria-label="Account">
+      <option value="">All accounts</option>
+      <option value="none" {{ 'selected' if account == 'none' }}>Unassigned</option>
+      {% for a in account_choices %}
+      <option value="{{ a.id }}" {{ 'selected' if account == a.id | string }}>{{ a.name }}</option>
+      {% endfor %}
+    </select>
+    {% if all_tags %}
+    <select name="tag" aria-label="Tag">
+      <option value="">Any tag</option>
+      {% for tg in all_tags %}
+      <option value="{{ tg.name }}" {{ 'selected' if tag == tg.name }}>{{ tg.name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <details class="morefilters" {{ 'open' if period == 'custom' }}>
+      <summary>Custom dates</summary>
+      <span class="inline-form">
+        <label>From <input type="date" name="from" value="{{ start if period == 'custom' and start else '' }}"></label>
+        <label>To <input type="date" name="to" value="{{ end if period == 'custom' and end else '' }}"></label>
+      </span>
+    </details>
+    <button type="submit" class="secondary">Show</button>
+  </form>
+
+  {% if report.rows %}
+  <table class="stack breakdown">
+    <thead><tr>
+      <th>{{ groups[group] }}</th>
+      <th class="right n">Transactions</th>
+      <th>Share of spending</th>
+      <th class="right n">Spent</th>
+      <th class="right n">Came in</th>
+    </tr></thead>
+    <tbody>
+      {% for row in report.rows %}
+      <tr>
+        <td><a href="{{ url_for('transactions.index', **row.link) }}">{{ row.label }}</a></td>
+        <td class="right n muted">{{ row.count }}</td>
+        <td>
+          {% if row.spent %}
+          <span class="sharebar" role="img" aria-label="{{ row.share }} percent of spending">
+            <span style="width:{{ row.share }}%"></span>
+          </span>
+          <span class="muted n">{{ row.share }}%</span>
+          {% endif %}
+        </td>
+        <td class="right n">{{ row.spent | money if row.spent else '—' }}</td>
+        <td class="right n pos">{{ row.income | money if row.income else '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if report.truncated %}
+  <p class="muted">Showing the {{ report.rows | length }} largest. The totals above count everything.</p>
+  {% endif %}
+  {% if group == 'tag' %}
+  <p class="muted">A transaction with two tags is counted under both, so these
+     rows can add up to more than the total above. Untagged transactions are
+     not listed.</p>
+  {% endif %}
+  {% else %}
+  <p class="muted">Nothing in this period matches.</p>
+  {% endif %}
+</div>
+{% endblock %}

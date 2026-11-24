@@ -1,0 +1,727 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">This instance</div>
+    <h1>Settings</h1>
+  </div>
+</div>
+
+<nav class="rangebar setnav" aria-label="Settings sections">
+  {% for key, label in sections.items() %}
+  {% if key != 'emails' or features.security_email or features.money_alerts %}
+  <a href="{{ url_for('settings.index', section=key) }}"
+     {{ 'aria-current=page' if key == section }}>{{ label }}</a>
+  {% endif %}
+  {% endfor %}
+  <a href="{{ url_for('settings.index') }}"
+     {{ 'aria-current=page' if not section }}>All</a>
+</nav>
+
+{% if show.general %}
+<div class="card" id="theme">
+  <h2>Appearance</h2>
+  <p class="muted">Pick a colour and light or dark. The choice is saved to this
+     install, so it follows you to your phone.</p>
+  <form method="post" action="{{ url_for('settings.theme_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Colour
+      <select name="palette">
+        {% for p in palettes %}
+          <option value="{{ p }}" {{ 'selected' if theme.palette == p }}>{{ p | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Mode
+      <select name="mode">
+        {% for m in modes %}
+          <option value="{{ m }}" {{ 'selected' if theme.mode == m }}>{{ m | capitalize }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Save theme</button>
+  </form>
+
+  <hr class="soft">
+
+  <form method="post" action="{{ url_for('settings.owner_name_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Your name
+      <input type="text" name="owner_name" value="{{ owner_name }}"
+             maxlength="{{ max_owner_name }}" placeholder="{{ app_name }}"
+             autocomplete="off">
+    </label>
+    <button type="submit">Save name</button>
+  </form>
+  <p class="muted">The side rail will say <b>{{ wordmark }}</b>. Leave it empty
+     to just say {{ app_name }}.</p>
+  <p class="muted">This is the one place your own name appears, and it is only
+     ever shown once you are logged in &mdash; the rail does not exist on the
+     login page. The app still calls itself {{ app_name }} everywhere a visitor
+     could see without your password: the browser tab, the installed app&rsquo;s
+     label, and the page shown when the laptop cannot be reached. It is stored
+     here rather than in the code, so it is in no copy of this project.</p>
+</div>
+{% endif %}
+
+{% if show.connections %}
+{% if features.plaid %}
+<div class="card" id="plaid">
+  <h2>Bank connections (Plaid)</h2>
+  <p class="muted">
+    Pulls transactions and balances from the bank itself. An account connected
+    this way <strong>stops importing from email</strong>, so the same purchase
+    is never recorded twice; email carries on for everything Plaid does not
+    cover.
+  </p>
+
+  {% if not plaid_key_set %}
+  <div class="notice">
+    <strong>BUDGET_VAULT_KEY is not set.</strong> It encrypts the access tokens
+    this app stores, and it has to come from the environment rather than from
+    this page — a key kept beside the thing it protects is not encryption.
+    Generate one with
+    <code>python -c "import secrets; print(secrets.token_urlsafe(32))"</code>,
+    set it as <code>BUDGET_PLAID_KEY</code>, and restart the app. Nothing can
+    be connected until it is set.
+  </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('settings.plaid_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Client ID
+      <input type="text" name="plaid_client_id" autocomplete="off"
+             value="{{ s.get('plaid_client_id', '') }}">
+    </label>
+    <label>Secret
+      <input type="password" name="plaid_secret" autocomplete="off"
+             placeholder="{{ 'saved — leave blank to keep it' if s.get('plaid_secret') else 'from your Plaid dashboard' }}">
+    </label>
+    <button type="submit">Save Plaid settings</button>
+  </form>
+
+  <p class="muted">
+    Both are on your Plaid dashboard under <strong>Team Settings → Keys</strong>.
+    They identify this app to Plaid and cannot read anyone's bank data on their
+    own — that needs an access token, which is stored encrypted. Leave the
+    secret blank to keep the one already saved.
+    {% if plaid_env %}This instance talks to the <strong>{{ plaid_env }}</strong>
+    environment.{% endif %}
+  </p>
+
+  {% if plaid_ready %}
+  <h3 class="sub">Connected</h3>
+  {% if plaid_items %}
+  {% for item in plaid_items %}
+  <div class="brow">
+    <div>
+      <div class="cn">{{ item.institution or 'An institution' }}</div>
+      <div class="cs">connected {{ item.linked_on }}{% if item.last_sync %}
+        &middot; last synced {{ item.last_sync }}{% else %}
+        &middot; not synced yet{% endif %}</div>
+      {% if item.last_error %}
+      <div class="cs goalline late">{{ item.last_error }}</div>
+      {% endif %}
+    </div>
+    <span class="lf">
+      <form method="post" action="{{ url_for('settings.plaid_sync') }}"
+            class="inline-form">
+        {{ csrf_field() }}
+        <input type="hidden" name="item_id" value="{{ item.item_id }}">
+        <button type="submit" class="secondary">Sync now</button>
+      </form>
+      <form method="post" action="{{ url_for('settings.plaid_unlink') }}"
+            class="inline-form"
+            onsubmit="return confirm('Disconnect this bank? Its accounts and transactions stay.');">
+        {{ csrf_field() }}
+        <input type="hidden" name="item_id" value="{{ item.item_id }}">
+        <button type="submit" class="secondary">Disconnect</button>
+      </form>
+    </span>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="muted">Nothing connected yet.</p>
+  {% endif %}
+
+  <p>
+    <a class="button" href="{{ url_for('settings.plaid_connect_page') }}">Connect a bank</a>
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if show.connections %}
+{% if features.email_import or features.security_email or features.money_alerts %}
+<div class="card" id="email">
+  {% if features.email_import %}
+  <h2>Bank email alerts (automatic import)</h2>
+  <p class="muted">
+    The tool checks this inbox every 2 hours through the day and turns bank
+    transaction-alert emails into transactions. Use <strong>Fetch now</strong>
+    below if you want a purchase to show up straight away. One-time setup:
+    enable 2-Step Verification on your Google account, create an
+    <strong>app password</strong> at
+    <code>myaccount.google.com/apppasswords</code>, and turn on per-transaction
+    email alerts in your bank's app.
+  </p>
+  {% else %}
+  <h2>Gmail connection</h2>
+  <p class="muted">
+    Used to send the emails you have turned on below. One-time setup: enable
+    2-Step Verification on your Google account and create an
+    <strong>app password</strong> at <code>myaccount.google.com/apppasswords</code>.
+  </p>
+  {% endif %}
+  <form method="post" action="{{ url_for('settings.email_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Gmail address <input type="email" name="email_address" value="{{ s.get('email_address', '') }}"></label>
+    <label>App password
+      <input type="password" name="email_app_password"
+             placeholder="{{ '••••••••••••••••' if s.get('email_app_password') else '16-letter app password' }}">
+    </label>
+    <label>IMAP host <input type="text" name="imap_host" value="{{ s.get('imap_host', 'imap.gmail.com') }}"></label>
+    {% if features.email_import %}
+    <label>Bank sender addresses <span class="muted">(comma-separated, recommended)</span>
+      <input type="text" name="email_senders" value="{{ s.get('email_senders', '') }}"
+             placeholder="no.reply.alerts@chase.com, alerts@notify.bank.com">
+    </label>
+    <label>Search window <span class="muted">(days)</span>
+      <input type="number" name="email_lookback_days" min="1" max="365"
+             value="{{ s.get('email_lookback_days', '5') }}">
+    </label>
+    <label class="checkbox">
+      <input type="checkbox" name="email_enabled" {{ 'checked' if s.get('email_enabled') == '1' }}>
+      Check automatically every 2 hours
+    </label>
+    {% endif %}
+    <button type="submit">Save email settings</button>
+  </form>
+  {% if features.email_import %}
+  <form method="post" action="{{ url_for('settings.email_fetch') }}" class="inline-form">
+    {{ csrf_field() }}
+    <button type="submit" class="secondary">Fetch now (also tests the connection)</button>
+  </form>
+  <p class="muted">
+    Last check: {{ s.get('email_last_poll', 'never') }}
+    {% if s.get('email_last_error') %} · Last error: {{ s.get('email_last_error') }}{% endif %}
+    <br>If the tool was off for a while, the next fetch automatically reaches
+    back to the last successful check — nothing in between is missed. Raise the
+    search window to backfill older emails from before you set this up.
+  </p>
+
+  {% if email_recent %}
+  <details>
+    <summary>Recently processed emails ({{ email_recent | length }})</summary>
+    <table class="rows">
+      <thead><tr><th>Date</th><th>Subject</th><th>Result</th><th>Parsed</th></tr></thead>
+      <tbody>
+        {% for e in email_recent %}
+        <tr>
+          <td class="muted nowrap">{{ e.received_at }}</td>
+          <td>{{ e.subject[:60] }}</td>
+          <td><span class="tag">{{ e.status }}</span></td>
+          <td class="muted">{% if e.amount_cents %}{{ (-e.amount_cents) | money }}{% endif %} {{ e.merchant or '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+
+{% if show.connections %}
+<div class="card" id="csv">
+  <h2>CSV import</h2>
+  <p class="muted">Upload any bank's CSV export on the
+     <a href="{{ url_for('transactions.index') }}#add">Transactions</a> page; you
+     say which column is which the first time, and it is remembered. The
+     setting below is for Robinhood card exports only: rows from the
+     cardholders listed are ignored.</p>
+  <form method="post" action="{{ url_for('settings.csv_save') }}" class="inline-form">
+    {{ csrf_field() }}
+    <label>Ignore cardholders <span class="muted">(comma-separated, partial names ok)</span>
+      <input type="text" name="csv_ignored_cardholders"
+             value="{{ s.get('csv_ignored_cardholders', '') }}" placeholder="e.g. Alex">
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endif %}
+
+{% if show.connections %}
+<div class="card" id="import-accounts">
+  <h2>Where imports go</h2>
+  <p class="muted">Imported transactions are filed under an account. A bank alert that
+     names a card's last four digits goes to the account with those digits (the
+     <em>Last 4 digits</em> box on the <a href="{{ url_for('accounts.index') }}">Accounts</a>
+     page). Anything else goes to the account chosen here, or stays Unassigned for you to
+     sort on the Transactions page.</p>
+  <form method="post" action="{{ url_for('settings.accounts_save') }}" class="form-row">
+    {{ csrf_field() }}
+    {% for field, caption in ([('csv_default_account_id', 'CSV imports'),
+                               ('email_default_account_id', 'Bank email alerts')]
+                              if features.email_import
+                              else [('csv_default_account_id', 'CSV imports')]) %}
+    <label>{{ caption }}
+      <select name="{{ field }}">
+        <option value="">Unassigned</option>
+        {% for a in accounts %}
+          <option value="{{ a.id }}" {{ 'selected' if s.get(field) == (a.id | string) }}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <button type="submit">Save</button>
+  </form>
+</div>
+{% endif %}
+
+{% if show.budgeting %}
+<div class="card" id="recurring">
+  <h2>Recurring items</h2>
+  <p class="muted">Rent, subscriptions, gym, paychecks — used by the Bills and
+     Paycheck pages to plan ahead. On its due date an item is matched to the
+     real transaction if your bank has reported one (by name, or by exact
+     amount), and posted automatically if not; a posted copy is replaced when
+     the bank's version arrives. Name an item the way your bank does and it
+     will be matched even when the amount varies.</p>
+  <form method="post" action="{{ url_for('settings.recurring_add') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Name <input type="text" name="name" placeholder="Rent" required></label>
+    <label>Type
+      <select name="kind">
+        <option value="expense">Expense</option>
+        <option value="income">Income (e.g. paycheck)</option>
+      </select>
+    </label>
+    <label>Amount <input type="text" name="amount" placeholder="1200.00" required inputmode="decimal"></label>
+    <label>Category
+      <select name="category_id">
+        <option value="">(none)</option>
+        {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Repeats
+      <select name="frequency">
+        <option value="monthly">Monthly</option>
+        <option value="biweekly">Every 2 weeks</option>
+        <option value="weekly">Weekly</option>
+        <option value="semimonthly">1st and 15th</option>
+        <option value="yearly">Yearly</option>
+      </select>
+    </label>
+    <label>First/next date <input type="date" name="next_date" value="{{ today }}" required></label>
+    <button type="submit">Add recurring</button>
+  </form>
+
+  {% if recurring_items %}
+  <table class="rows">
+    <thead><tr><th>Name</th><th>Category</th><th>Repeats</th><th>Next</th><th class="right">Amount</th><th></th></tr></thead>
+    <tbody>
+      {% for r in recurring_items %}
+      <tr class="{{ 'inactive' if not r.active }}">
+        <td>{{ r.name }}</td>
+        <td class="muted">{{ r.category_name or '—' }}</td>
+        <td class="muted">{{ r.frequency }}</td>
+        <td class="muted">{{ r.next_date }}</td>
+        <td class="right {{ 'pos' if r.amount_cents > 0 else 'neg' }}">{{ r.amount_cents | money_signed }}</td>
+        <td class="nowrap actions">
+          <form method="post" action="{{ url_for('settings.recurring_toggle', item_id=r.id) }}" class="inline-form">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">{{ 'pause' if r.active else 'resume' }}</button>
+          </form>
+          <form method="post" action="{{ url_for('settings.recurring_delete', item_id=r.id) }}" class="inline-form"
+                onsubmit="return confirm('Delete this recurring item?');">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if show.budgeting %}
+<div class="card" id="paycheck">
+  <h2>Paycheck</h2>
+  <p class="muted">Used by the Paycheck page to compute pay periods and safe-to-spend.
+     Saving also keeps a "Paycheck" recurring item in sync, so every payday
+     (starting with the current pay period) posts as an income transaction —
+     that's what the Dashboard counts as income.</p>
+  <form method="post" action="{{ url_for('settings.paycheck_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>How often are you paid?
+      <select name="pay_frequency">
+        {% for value, label in [('weekly', 'Weekly'), ('biweekly', 'Every 2 weeks'),
+                                ('semimonthly', '1st and 15th'), ('monthly', 'Monthly')] %}
+          <option value="{{ value }}" {{ 'selected' if s.get('pay_frequency') == value }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Take-home amount per check
+      <input type="text" name="pay_amount" required inputmode="decimal"
+             value="{{ '%.2f' | format(s.get('pay_amount_cents', '0') | int / 100) if s.get('pay_amount_cents') else '' }}">
+    </label>
+    <label>Date of any recent payday
+      <input type="date" name="pay_anchor_date" value="{{ s.get('pay_anchor_date', today) }}" required>
+    </label>
+    <button type="submit">Save paycheck settings</button>
+  </form>
+</div>
+{% endif %}
+
+{% if show.connections %}
+{% if features.importer %}
+<div class="card" id="import">
+  <h2>Import from an older Budget Tool</h2>
+  <p class="muted">Brings an old instance's transactions, categories, accounts,
+    merchant rules and recurring items into this one. It never touches the old
+    database — it takes a consistent snapshot first, so it is safe to run while
+    the old instance is still going.</p>
+  <p class="muted">Running it twice imports nothing the second time, so if you
+    are unsure whether a previous attempt finished, just run it again. Your
+    current budgets are left alone: a category that already exists here keeps
+    its own settings rather than taking the old one's.</p>
+
+  <form method="post" action="{{ url_for('settings.import_inspect') }}"
+        class="inline-form">
+    {{ csrf_field() }}
+    <label>Path on this machine
+      <input type="text" name="source_path" size="34"
+             placeholder="/home/you/budget-tool/budget.db">
+    </label>
+    <button type="submit" class="secondary">Look inside first</button>
+  </form>
+
+  <hr class="soft">
+
+  <form method="post" action="{{ url_for('settings.import_run') }}"
+        enctype="multipart/form-data" class="form-row">
+    {{ csrf_field() }}
+    <label>Path on this machine
+      <input type="text" name="source_path" size="30"
+             placeholder="/home/you/budget-tool/budget.db">
+    </label>
+    <label>…or upload one from another machine
+      <input type="file" name="source_file" accept=".db,.sqlite,.sqlite3">
+    </label>
+    <button type="submit"
+            onclick="return confirm('Import that database into this one? Running it again later is safe.');"
+            >Import it</button>
+  </form>
+  <p class="muted">A path can also point at one of the old instance's daily
+    snapshots, or a copy pulled off a NAS — those are already consistent. On a
+    Pi shared with other people, file permissions mean you can only read your
+    own old database, which is as it should be.</p>
+</div>
+{% endif %}
+{% endif %}
+
+{% if show.budgeting %}
+<div class="card" id="groups">
+  <h2>Category groups</h2>
+  <p class="muted">"Where does my money go" is rarely answered at the level of
+    fourteen categories — it is answered at the level of three or four. Groups
+    are that layer, and they subtotal on the
+    <a href="{{ url_for('budget.index') }}">Budget</a> page. Nothing is grouped
+    until you say so, and an ungrouped category works exactly as it always has.</p>
+
+  <form method="post" action="{{ url_for('settings.group_add') }}" class="inline-form">
+    {{ csrf_field() }}
+    <input type="text" name="name" placeholder="e.g. Essentials" required maxlength="40">
+    <button type="submit">Add group</button>
+  </form>
+
+  {% if groups %}
+  <table class="rows">
+    <thead><tr><th>Group</th><th>Categories</th><th></th></tr></thead>
+    <tbody>
+      {% for g in groups %}
+      <tr>
+        <td>{{ g.name }}</td>
+        <td class="muted">{{ g.count }}</td>
+        <td class="right">
+          <form method="post" action="{{ url_for('settings.group_delete', group_id=g.id) }}"
+                class="inline-form">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="post" action="{{ url_for('settings.group_assign') }}">
+    {{ csrf_field() }}
+    <table class="rows">
+      <thead><tr><th>Category</th><th>Group</th></tr></thead>
+      <tbody>
+        {% for c in categories %}
+        <tr>
+          <td>{{ c.name }} <span class="tag">{{ c.kind }}</span></td>
+          <td>
+            <label for="grp{{ c.id }}" class="visually-hidden">Group for {{ c.name }}</label>
+            <select name="group_for_{{ c.id }}" id="grp{{ c.id }}">
+              <option value="">Ungrouped</option>
+              {% for g in groups %}
+              <option value="{{ g.id }}" {{ 'selected' if g.id == c.group_id }}>{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit">Save groups</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if show.budgeting %}
+<div class="card" id="categories">
+  <h2>Categories</h2>
+  <form method="post" action="{{ url_for('settings.category_add') }}" class="inline-form">
+    {{ csrf_field() }}
+    <input type="text" name="name" placeholder="New category name" required>
+    <select name="kind">
+      <option value="expense">Expense</option>
+      <option value="income">Income</option>
+    </select>
+    <button type="submit">Add category</button>
+  </form>
+  <table class="rows">
+    <thead><tr><th>Name</th><th>Kind</th><th class="right">Budget this month</th><th></th></tr></thead>
+    <tbody>
+      {% for c in categories %}
+      <tr>
+        <td>
+          <span class="nameline">
+            {{ glyph(c.icon, c.colour, size='sm') }}
+            {{ c.name }}
+          </span>
+        </td>
+        <td class="muted">{{ c.kind }}</td>
+        <td class="right muted">{{ c.budget_cents | money if c.budget_cents else '—' }}</td>
+        <td class="right">
+          <a class="linklike" href="{{ url_for('settings.style_picker',
+               kind='category', row_id=c.id, next='/settings#categories') }}">icon</a>
+          <form method="post" action="{{ url_for('settings.category_archive', cat_id=c.id) }}" class="inline-form"
+                onsubmit="return confirm('Archive this category? Past transactions keep it.');">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">archive</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Budget amounts are edited on the <a href="{{ url_for('budget.index') }}">Budget</a> page.</p>
+</div>
+{% endif %}
+
+{% if show.budgeting %}
+<div class="card" id="rules">
+  <h2>Merchant rules (auto-categorization)</h2>
+  <p class="muted">If a transaction's merchant contains the match text, it gets
+     the category automatically — and any tags you add here. Rules are usually
+     created for you from the “needs a category” inbox.</p>
+  <p class="muted">The amount boxes are optional and read as plain amounts, the
+     way a statement shows them: leaving both blank means the rule matches any
+     amount. They are what lets one merchant have two answers — “AMAZON up to
+     $20” filed as Household and “AMAZON from $20.01” as Shopping. Where two
+     rules both match, the higher priority wins, and failing that the longer
+     match text.</p>
+  <form method="post" action="{{ url_for('settings.rule_add') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Merchant contains
+      <input type="text" name="match_text" placeholder="e.g. KROGER" required>
+    </label>
+    <label>Category
+      <select name="category_id" required>
+        <option value="">Category…</option>
+        {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>From
+      <input type="text" name="amount_min" inputmode="decimal" placeholder="any"
+             size="7">
+    </label>
+    <label>Up to
+      <input type="text" name="amount_max" inputmode="decimal" placeholder="any"
+             size="7">
+    </label>
+    <label>Also tag
+      <input type="text" name="add_tags" placeholder="optional" size="12">
+    </label>
+    <label>Priority
+      <input type="number" name="priority" value="0" size="4">
+    </label>
+    <button type="submit">Add rule</button>
+  </form>
+  {% if rules %}
+  <table class="rows">
+    <thead><tr><th>Merchant contains…</th><th>Category</th><th>Amount</th>
+               <th>Also tags</th><th>Priority</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rules %}
+      <tr>
+        <td><code>{{ r.match_text }}</code></td>
+        <td>{{ r.category_name }}</td>
+        <td class="muted nowrap">
+          {%- if r.amount_min_cents is not none and r.amount_max_cents is not none %}
+            {{ r.amount_min_cents | money }} – {{ r.amount_max_cents | money }}
+          {%- elif r.amount_min_cents is not none %}from {{ r.amount_min_cents | money }}
+          {%- elif r.amount_max_cents is not none %}up to {{ r.amount_max_cents | money }}
+          {%- else %}any{% endif %}
+        </td>
+        <td class="muted">{{ r.add_tags or '—' }}</td>
+        <td class="muted">{{ r.priority or '—' }}</td>
+        <td class="right">
+          <form method="post" action="{{ url_for('settings.rule_delete', rule_id=r.id) }}" class="inline-form">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if show.general %}
+<div class="card" id="features">
+  <h2>Optional features</h2>
+  <p class="muted">
+    These start off unless you turn them on, apart from the one that says
+    otherwise in its own description. A feature that is off is hidden
+    completely, not just greyed out.
+  </p>
+  {% for name, feature in feature_registry.items() %}
+  <form method="post" action="{{ url_for('settings.toggle_feature') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="name" value="{{ name }}">
+    <input type="hidden" name="enabled" value="{{ '0' if features[name] else '1' }}">
+    <h3>{{ feature.label }}</h3>
+    <p class="muted">{{ feature.description }}</p>
+    <button type="submit" class="secondary">
+      {{ 'Turn off' if features[name] else 'Turn on' }}
+    </button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if show.emails %}
+{% if features.security_email or features.money_alerts %}
+<div class="card" id="security-email">
+  <h2>Emails this app sends</h2>
+  <p class="muted">
+    Sent from the Gmail account under <a href="#email">Bank email alerts</a>,
+    using the same app password, so that needs to be saved first.
+  </p>
+  {% if features.security_email %}
+  <p class="muted">
+    <strong>Security.</strong> When repeated wrong passwords lock the login, an
+    email goes to the address below. You get <strong>one email for each run of
+    wrong passwords</strong>, not one per attempt; the next waits until someone
+    signs in with the right password. So a quiet inbox does not mean the
+    guessing has stopped.
+  </p>
+  {% endif %}
+  {% if features.money_alerts %}
+  <p class="muted">
+    <strong>Daily digest.</strong> One message a day at 07:00, and only on a day
+    that has something in it — a bill due in the next few days, a subscription
+    whose price went up, a category over its budget, or email ingestion having
+    stopped. Each item is sent <strong>once</strong>: a category that is over
+    budget is not reported again until the following month. This one goes to you
+    alone and is never copied to a host.
+  </p>
+  {% if digest_preview %}
+  <details class="goalbox">
+    <summary>What the next digest would say
+      ({{ digest_preview.lines | length }})</summary>
+    {% if digest_preview.broken %}
+    <p class="muted">The preview could not be worked out. The digest itself is
+      unaffected — it is put together again when it is sent.</p>
+    {% elif digest_preview.lines %}
+    <ul>
+      {% for line in digest_preview.lines %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nothing to report right now, so nothing would be sent.
+      Items already sent are not repeated, so this is empty after the morning's
+      digest has gone out.</p>
+    {% endif %}
+  </details>
+  {% endif %}
+  {% endif %}
+  {% if not s.get('email_address') or not s.get('email_app_password') %}
+  <div class="notice">
+    Nothing can be sent yet: the Gmail address and app password under
+    <a href="#email">Bank email alerts</a> are not both saved.
+  </div>
+  {% elif s.get('notify_operator_email') and not s.get('notify_email') %}
+  <div class="notice">
+    Nothing is being sent: the host's address only ever receives a copy, so
+    <strong>Send alerts to</strong> has to be filled in as well.
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('settings.notify_save') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Send alerts to
+      <input type="email" name="notify_email" value="{{ s.get('notify_email', '') }}"
+             placeholder="you@example.com">
+    </label>
+    <label>Host's address <span class="muted">(optional — every alert is also sent to this address)</span>
+      <input type="email" name="notify_operator_email"
+             value="{{ s.get('notify_operator_email', '') }}">
+    </label>
+    <label>SMTP host <input type="text" name="smtp_host" value="{{ s.get('smtp_host', 'smtp.gmail.com') }}"></label>
+    <label>SMTP port
+      <input type="number" name="smtp_port" min="1" max="65535"
+             value="{{ s.get('smtp_port', '587') }}">
+    </label>
+    <button type="submit">Save email settings</button>
+  </form>
+  <p class="muted">
+    If someone hosts this instance for you and asked to be copied, their address
+    goes in the host box. They receive the same email, and it lists them on its
+    To line, so the copy is never hidden from you. It covers
+    <strong>security events only</strong> — never your balances or
+    transactions, and never the daily digest, which goes to you alone. Leave
+    both SMTP boxes as they are for Gmail.
+  </p>
+</div>
+{% endif %}
+{% endif %}
+
+{% if show.general %}
+<div class="card" id="security">
+  <h2>Security</h2>
+  <p class="muted">Signed in as <strong>{{ person.name }}</strong>.</p>
+  <p><a href="{{ url_for('household.index') }}">Household and passwords</a>
+     — add the people you share this budget with, and change your password.</p>
+  <p><a href="{{ url_for('auth.devices') }}">Remembered devices</a></p>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    {{ csrf_field() }}
+    <button type="submit" class="secondary">Log out</button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

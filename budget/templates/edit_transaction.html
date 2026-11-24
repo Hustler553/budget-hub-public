@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Edit transaction{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ txn.txn_date }}</div>
+    <h1>Edit transaction</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('transactions.index') }}">← Transactions</a>
+  </div>
+</div>
+
+<div class="card">
+  <form method="post" class="form-row">
+    {{ csrf_field() }}
+    <label>Date <input type="date" name="date" value="{{ txn.txn_date }}" required></label>
+    <label>Type
+      <select name="kind">
+        <option value="expense" {{ 'selected' if txn.amount_cents < 0 }}>Expense</option>
+        <option value="income" {{ 'selected' if txn.amount_cents >= 0 }}>Income</option>
+      </select>
+    </label>
+    <label>Amount
+      <input type="text" name="amount" required inputmode="decimal"
+             value="{{ '%.2f' | format(txn.amount_cents | abs / 100) }}">
+    </label>
+    <label>Merchant <input type="text" name="merchant" value="{{ txn.merchant }}"></label>
+    {% if txn_splits %}
+    <label>Category
+      <input type="text" value="Split across {{ txn_splits | length }} categories"
+             disabled aria-describedby="split-note">
+    </label>
+    {% else %}
+    <label>Category
+      <select name="category_id">
+        <option value="">(none)</option>
+        {% for c in categories %}
+          <option value="{{ c.id }}" {{ 'selected' if c.id == txn.category_id }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>Account
+      <select name="account_id">
+        <option value="">Unassigned</option>
+        {% for a in account_choices %}
+          <option value="{{ a.id }}" {{ 'selected' if a.id == txn.account_id }}>
+            {{ a.name }}{{ ' (archived)' if a.archived }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Note <input type="text" name="note" value="{{ txn.note }}"></label>
+    <label>Tags <input type="text" name="tags" value="{{ txn_tags }}"
+                       placeholder="holiday, reimbursable"></label>
+    <button type="submit">Save</button>
+    <a href="{{ url_for('transactions.index') }}" class="button secondary">Cancel</a>
+  </form>
+</div>
+
+<div class="card" id="split">
+  <div class="dh">
+    <h2>Split across categories</h2>
+    <span class="muted n">{{ txn.amount_cents | abs | money }} to account for</span>
+  </div>
+
+  {% if txn_splits %}
+  <table class="calc">
+    {% for s in txn_splits %}
+    <tr><td>{{ s.category_name }}</td>
+        <td class="right n">{{ s.amount_cents | abs | money }}</td></tr>
+    {% endfor %}
+    <tr class="total"><td>Total</td>
+        <td class="right n">{{ txn_splits | sum(attribute='amount_cents') | abs | money }}</td></tr>
+  </table>
+  <form method="post" action="{{ url_for('transactions.unsplit', txn_id=txn.id) }}"
+        class="inline-form">
+    {{ csrf_field() }}
+    <button type="submit" class="secondary">Remove the split</button>
+  </form>
+  <hr class="soft">
+  {% endif %}
+
+  <p class="muted" id="split-note">
+    {% if txn_splits %}Change the parts below and save to replace them.
+    {% else %}Put part of this transaction in one category and part in another —
+    a shop that was half groceries and half household.{% endif %}
+    Amounts are positive, like everywhere else; the parts have to add up to
+    {{ txn.amount_cents | abs | money }} exactly.
+  </p>
+
+  <form method="post" action="{{ url_for('transactions.split', txn_id=txn.id) }}">
+    {{ csrf_field() }}
+    {% for s in txn_splits %}
+    <div class="form-row splitrow">
+      <label>Category
+        <select name="split_category">
+          <option value="">—</option>
+          {% for c in categories %}
+            <option value="{{ c.id }}" {{ 'selected' if c.id == s.category_id }}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Amount
+        <input type="text" name="split_amount" inputmode="decimal"
+               value="{{ '%.2f' | format(s.amount_cents | abs / 100) }}">
+      </label>
+    </div>
+    {% endfor %}
+    {% for _ in blank_split_rows %}
+    <div class="form-row splitrow">
+      <label>Category
+        <select name="split_category">
+          <option value="">—</option>
+          {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Amount
+        <input type="text" name="split_amount" inputmode="decimal" placeholder="0.00">
+      </label>
+    </div>
+    {% endfor %}
+    <button type="submit">{{ 'Replace the split' if txn_splits else 'Split it' }}</button>
+  </form>
+</div>
+
+{% endblock %}

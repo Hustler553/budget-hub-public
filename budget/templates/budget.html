@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Budget{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">Budget</div>
+    <h1>{{ month_name }}</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('budget.index', month=prev_month) }}">← {{ prev_month }}</a>
+    <a class="button secondary" href="{{ url_for('budget.index', month=next_month) }}">{{ next_month }} →</a>
+  </div>
+</div>
+
+{% if allocation.savings_cents or allocation.awaiting_income %}
+<div class="card" id="savings-first">
+  <h2>Savings first</h2>
+  {% if allocation.awaiting_income %}
+  <p class="muted">
+    A percentage of income is set aside first, but
+    <strong>{{ base_month_name }}</strong> recorded no income to take a
+    percentage of — so there is nothing to divide yet. The figures appear once
+    a month with income in it is behind you.
+  </p>
+  {% else %}
+  <div class="brow">
+    <div><div class="cn">{{ base_month_name }} income</div>
+      <div class="cs">what this month's budgets are worked out from</div></div>
+    <span class="lf n">{{ allocation.income_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Savings, off the top</div>
+      <div class="cs">your percentage budgets, taken first</div></div>
+    <span class="lf n g">{{ allocation.savings_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Left to budget from</div>
+      <div class="cs">the pool every other category draws on</div></div>
+    <span class="lf n{{ ' o' if allocation.remainder_cents < 0 }}">{{ allocation.remainder_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Budgeted elsewhere</div>
+      <div class="cs">your fixed and annual budgets</div></div>
+    <span class="lf n">{{ allocation.committed_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">{% if allocation.unallocated_cents < 0 %}Over the pool
+      {%- else %}Still to allocate{% endif %}</div>
+      <div class="cs">
+        {%- if allocation.unallocated_cents < 0 %}what the spending budgets
+          exceed the pool by
+        {%- else %}income not yet claimed by any budget{% endif %}</div></div>
+    <span class="lf n {{ 'o' if allocation.unallocated_cents < 0 else 'g' }}">{{
+      allocation.unallocated_cents | money_signed }}</span>
+  </div>
+
+  {% if allocation.remainder_cents < 0 %}
+  <p class="muted">
+    Your percentage budgets come to more than all of
+    {{ base_month_name }}'s income, so there is nothing left for anything else.
+    That is almost certainly a percentage set higher than intended.
+  </p>
+  {% elif allocation.unallocated_cents < 0 %}
+  <p class="muted">
+    Savings keeps its full share — that is the point of taking it first — so
+    this is the spending side that is short. Cutting
+    <strong>{{ allocation.unallocated_cents | abs | money }}</strong> from the
+    budgets below brings the month back inside
+    {{ base_month_name }}'s income.
+  </p>
+  {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if total_budget %}
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Spent</div>
+    <div class="v n">{{ total_spent | money }}</div>
+    <div class="bar lg">
+      <i class="{{ 'o' if total_remaining < 0 else 'idle' }}"
+         style="width: {{ [100, (total_spent / total_budget * 100) | round | int] | min }}%"></i>
+    </div>
+    <div class="d">of {{ total_budget | money }} budgeted</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Left to spend</div>
+    <div class="v n {{ 'o' if total_remaining < 0 else 'g' }}">{{ total_remaining | money_signed }}</div>
+    <div class="d">
+      {% if total_remaining < 0 %}over the month's budgets
+      {% else %}still inside the month's budgets{% endif %}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Spent this month</div>
+    <div class="v n">{{ total_spent | money }}</div>
+    <div class="d">No budgets set yet — type an amount beside any category
+      below and this page starts tracking it.</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="{{ url_for('budget.save') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="month" value="{{ month }}">
+
+    {% for g in groups %}
+    {% if groups | length > 1 or g.name != 'Ungrouped' %}
+    <div class="grouphead">
+      <span class="gn">{{ g.name }}</span>
+      <span class="gt n">{{ g.spent_cents | money }}
+        {%- if g.available_cents %} of {{ g.available_cents | money }}{% endif %}</span>
+      <span class="gr n {{ 'neg' if g.remaining_cents < 0 else 'pos' }}">
+        {{- g.remaining_cents | money_signed }}</span>
+    </div>
+    {% endif %}
+    {% for c in g.rows %}
+    <div class="brow {{ 'is-over' if c.status == 'over' }}">
+      <input class="erow" type="checkbox" id="erow{{ c.id }}"
+             aria-label="Edit {{ c.name }}">
+      <label class="cmeta" for="erow{{ c.id }}">
+        <div class="rowlead">
+        {{ glyph(c.icon, c.colour) }}
+        <div class="tx">
+        <div class="cn">{{ c.name }}</div>
+        <div class="cs n">{{ c.spent_cents | money }} spent
+          {%- if c.rollover_enabled and c.carried_in_cents %}
+          · <span class="{{ 'neg' if c.carried_in_cents < 0 else 'pos' }}"
+            >{{ c.carried_in_cents | money_signed }} carried in</span>
+          {%- endif %}
+          {%- if c.goal %}
+          <br><span class="goalline {{ 'ok' if c.goal.reached else ('late' if c.goal.on_track is false else '') }}">
+            {%- if c.goal.reached %}goal reached &middot; {{ c.goal.saved_cents | money }} saved
+            {%- else %}{{ c.goal.saved_cents | money }} of {{ c.goal.target_cents | money }} saved
+              {%- if c.goal.by_month %} &middot; by {{ c.goal.by_month }}
+                {%- if c.goal.on_track is false %} &middot; needs
+                  {{ c.goal.needed_per_month | money }} a month{% endif %}
+              {%- endif %}
+            {%- endif %}
+          </span>
+          {%- endif %}
+        </div>
+        </div>
+        </div>
+      </label>
+      <div class="rl">
+        {% if c.budget_cents %}
+        <div class="bar"><i class="{{ 'o' if c.status == 'over' else 'w' if c.status == 'tight' else 'g' }}"
+                            style="width: {{ c.pct }}%"></i></div>
+        {% endif %}
+      </div>
+      <div class="bfield">
+        <input class="kr" type="radio" id="kind{{ c.id }}f" name="kind_{{ c.id }}"
+               value="fixed" {{ 'checked' if c.budget_kind != 'percent' }}>
+        <input class="kr" type="radio" id="kind{{ c.id }}p" name="kind_{{ c.id }}"
+               value="percent" {{ 'checked' if c.budget_kind == 'percent' }}>
+        <input class="kr" type="radio" id="kind{{ c.id }}a" name="kind_{{ c.id }}"
+               value="annual" {{ 'checked' if c.budget_kind == 'annual' }}>
+        <div class="seg">
+          <label class="sf" for="kind{{ c.id }}f" title="Budget a dollar amount">$</label>
+          <label class="sp" for="kind{{ c.id }}p" title="Budget a share of last month's income">%</label>
+          <label class="sa" for="kind{{ c.id }}a"
+                 title="Budget a yearly amount, spread across the months">/yr</label>
+        </div>
+        <input class="budget-input amt" type="text" inputmode="decimal"
+               name="budget_{{ c.id }}"
+               aria-label="Dollar budget for {{ c.name }}"
+               value="{{ '%.2f' | format(c.fixed_cents / 100) if c.fixed_cents else '' }}"
+               placeholder="0">
+        <input class="budget-input pct" type="text" inputmode="decimal"
+               name="percent_{{ c.id }}"
+               aria-label="Percentage of income budget for {{ c.name }}"
+               value="{{ c.percent_bp | percent }}"
+               placeholder="0">
+        <label class="checkbox rollover"
+               title="{{ 'A yearly budget always carries over — that is what spreads it across the months' if c.is_annual else 'Carry what is left over into next month' }}">
+          <input type="checkbox" name="rollover_{{ c.id }}"
+                 {{ 'checked' if c.rollover_enabled or c.is_annual }}
+                 {{ 'disabled' if c.is_annual }}>
+          <span>Roll over{{ ' (always)' if c.is_annual }}</span>
+        </label>
+        <input class="budget-input ann" type="text" inputmode="decimal"
+               name="annual_{{ c.id }}"
+               aria-label="Yearly budget for {{ c.name }}"
+               value="{{ '%.2f' | format(c.annual_cents / 100) if c.annual_cents else '' }}"
+               placeholder="0">
+        <details class="goalbox">
+          <summary>{{ 'Goal' if not c.goal else c.goal.pct ~ '% of ' ~ (c.goal.target_cents | money) }}</summary>
+          <label>Target
+            <input type="text" name="goal_{{ c.id }}" inputmode="decimal" size="8"
+                   value="{{ '%.2f' | format(c.goal_cents / 100) if c.goal_cents else '' }}"
+                   placeholder="none">
+          </label>
+          <label>By
+            <input type="month" name="goaldate_{{ c.id }}" size="8"
+                   value="{{ c.goal_date or '' }}">
+          </label>
+        </details>
+        <div class="annhint">
+          a year &middot; <b>{{ c.budget_cents | money }}</b> a month
+        </div>
+        <div class="pcthint">
+          {% if c.awaiting_income %}
+            no income in {{ base_month_name }} yet
+          {% else %}
+            of {{ base_income | money }} = <b>{{ c.budget_cents | money }}</b>
+          {% endif %}
+        </div>
+      </div>
+      <span class="lf n {{ 'o' if c.status == 'over' }}">
+        {% if c.budget_cents %}{{ c.remaining_cents | money_signed }}{% else %}—{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    {% endfor %}
+
+    {% if uncategorized %}
+    <div class="brow">
+      <div>
+        <div class="cn muted">Uncategorized spending</div>
+        <div class="cs n">{{ uncategorized | money }} spent</div>
+      </div>
+      <div class="rl"></div>
+      <span></span>
+      <a href="{{ url_for('transactions.index', category='none') }}">categorize →</a>
+    </div>
+    {% endif %}
+
+    <p style="margin-top:16px">
+      <button type="submit">Save budgets</button>
+      <span class="muted">Saves from <strong>{{ month_name }}</strong> onwards;
+        earlier months keep the budgets they had.
+        Leave a category blank for “no budget, just track it.”
+        Percentages are taken from {{ base_month_name }}’s income
+        ({{ base_income | money }}), so a budget set this way keeps up with
+        what you actually earn.</span>
+    </p>
+  </form>
+</div>
+
+<details class="card manage">
+  <summary>Add or archive categories</summary>
+
+  <form method="post" action="{{ url_for('settings.category_add') }}" class="inline-form">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ url_for('budget.index', month=month) }}">
+    <input type="text" name="name" placeholder="New category name" required>
+    <select name="kind" aria-label="Category type">
+      <option value="expense">Expense</option>
+      <option value="income">Income</option>
+    </select>
+    <button type="submit">Add category</button>
+  </form>
+
+  <table class="stack stack-manage">
+    <thead><tr><th>Category</th><th>Type</th><th></th></tr></thead>
+    <tbody>
+      {% for c in all_categories %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="muted">{{ c.kind }}</td>
+        <td class="right">
+          <form method="post" action="{{ url_for('settings.category_archive', cat_id=c.id) }}"
+                class="inline-form"
+                onsubmit="return confirm('Archive this category? Past transactions keep it.');">
+            {{ csrf_field() }}
+            <input type="hidden" name="next" value="{{ url_for('budget.index', month=month) }}">
+            <button type="submit" class="linklike">archive</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Archiving hides a category from budgets and pickers but keeps
+     every transaction filed under it. Adding a category with an archived name
+     brings it back.</p>
+</details>
+
+{% endblock %}

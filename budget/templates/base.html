@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="{{ theme.mode }}" data-palette="{{ theme.palette }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>{% block title %}Budget{% endblock %} · {{ app_name }}</title>
+
+  <meta name="theme-color" content="{{ '#191F28' if theme.mode == 'dark' else '#11151B' }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="{{ app_name }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-180.png') }}">
+  <link rel="icon" type="image/png" sizes="32x32"
+        href="{{ url_for('static', filename='icons/icon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192"
+        href="{{ url_for('static', filename='icons/icon-192.png') }}">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='scroll-restore.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='table-labels.js') }}" defer></script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("{{ url_for('pwa.service_worker') }}");
+      });
+    }
+  </script>
+</head>
+<body>
+  <div class="shell">
+    {% block nav %}
+    <div class="sidenav">
+      <input class="morebox" type="checkbox" id="navmore">
+
+      <span class="lg"><i></i>{{ wordmark }}</span>
+
+      <nav aria-label="Sections">
+        <span class="grp">Overview</span>
+        <a class="pri" href="{{ url_for('dashboard.index') }}"
+           {% if request.endpoint == 'dashboard.index' %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          Dashboard</a>
+        <a class="pri" href="{{ url_for('transactions.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('transactions.') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h13l-3-3"/><path d="M17 17H4l3 3"/></svg>
+          Transactions</a>
+        <a href="{{ url_for('accounts.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('accounts.') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/></svg>
+          Accounts</a>
+        <a class="pri" href="{{ url_for('budget.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('budget.') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          Budget</a>
+
+        <a class="pri" href="{{ url_for('bills.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('bills.') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+          Bills</a>
+
+        <span class="grp">Reports</span>
+        <a href="{{ url_for('dashboard.history') }}"
+           {% if request.endpoint == 'dashboard.history' %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+          Cash flow</a>
+        <a href="{{ url_for('reports.index') }}"
+           {% if request.endpoint == 'reports.index' %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4"/></svg>
+          Reports</a>
+        <a href="{{ url_for('reports.investments_page') }}"
+           {% if request.endpoint == 'reports.investments_page' %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
+          Investments</a>
+        <a href="{{ url_for('reports.goals_page') }}"
+           {% if request.endpoint and request.endpoint.startswith('reports.goal') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+          Goals</a>
+
+        <span class="grp">Tools</span>
+        <a href="{{ url_for('paycheck.index') }}"
+           {% if request.endpoint and request.endpoint.startswith('paycheck.') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20"/><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Paycheck</a>
+        {% if features.money_math %}
+        <a href="{{ url_for('moneymath.loans_page') }}"
+           {% if request.endpoint and request.endpoint.startswith('moneymath.loans') %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h2M8 15h2M14 11h2M14 15h2"/></svg>
+          Loans</a>
+        <a href="{{ url_for('moneymath.projector') }}"
+           {% if request.endpoint == 'moneymath.projector' %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20V10M9 20V4M15 20v-7M21 20V7"/></svg>
+          Savings</a>
+        {% endif %}
+
+        <span class="grp">This instance</span>
+        <a href="{{ url_for('settings.index', section='general') }}"
+           {% if request.endpoint and (request.endpoint.startswith('settings.') or request.endpoint.startswith('household.')) %}aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+          Settings</a>
+
+        <label class="morelab" for="navmore">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          More</label>
+      </nav>
+
+      <div class="foot">
+        <form method="post" action="{{ url_for('settings.theme_toggle_mode') }}">
+          {{ csrf_field() }}
+          <button type="submit"
+                  aria-label="Switch to {{ 'dark' if theme.mode == 'light' else 'light' }} mode">
+            {{ 'Dark mode' if theme.mode == 'light' else 'Light mode' }}
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endblock %}
+
+    <div class="main">
+      {% block layout %}
+      <main class="page">
+        {% include "_flash.html" %}
+        {% block content %}{% endblock %}
+      </main>
+      {% endblock %}
+    </div>
+  </div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

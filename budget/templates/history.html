@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Last 12 months{% endblock %}
+{% block content %}
+
+{% include "_paycheck_banner.html" %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">Last 12 months</div>
+    <h1>Income, spending &amp; what you kept</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('dashboard.index') }}">← Dashboard</a>
+  </div>
+</div>
+
+<div class="card">
+  {% include "_chart.html" %}
+</div>
+
+<div class="card">
+  <h2>Month by month</h2>
+  <p class="muted">“Running kept” adds each month to the ones before it, so you
+     can see where a heavy month ate into what the earlier ones put away.</p>
+  <table class="stack stack-months">
+    <thead>
+      <tr><th>Month</th><th class="right">Income</th><th class="right">Spending</th>
+          <th class="right">Kept</th><th class="right">Running kept</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="nowrap">{{ r.name }}{% if r.is_current %} <span class="tag">so far</span>{% endif %}</td>
+        <td class="right pos">{{ r.income | money }}</td>
+        <td class="right">{{ r.expenses | money }}</td>
+        <td class="right {{ 'pos' if r.net >= 0 else 'neg' }}">{{ r.net | money_signed }}</td>
+        <td class="right {{ 'pos' if r.running_kept >= 0 else 'neg' }}">
+          <strong>{{ r.running_kept | money_signed }}</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="dh">
+    <h2>What you keep</h2>
+    <span class="muted">Share of each month's income that survived it</span>
+  </div>
+
+  {% if rate_chart.points %}
+  <svg class="chart" viewBox="0 0 620 200" role="img"
+       aria-label="Savings rate over {{ rate.months_counted }} months, averaging {{ rate.average }} percent.">
+    <line class="grid" x1="44" y1="10" x2="614" y2="10"></line>
+    <line class="grid" x1="44" y1="87.5" x2="614" y2="87.5"></line>
+    <line class="grid" x1="44" y1="165" x2="614" y2="165"></line>
+    {% if rate_chart.zero_y is not none %}
+    <line class="nwzero" x1="44" y1="{{ rate_chart.zero_y }}"
+          x2="614" y2="{{ rate_chart.zero_y }}"></line>
+    <text class="nwzerolab" x="40" y="{{ rate_chart.zero_y + 3.5 }}">0%</text>
+    {% endif %}
+    <polyline class="nwline" points="{{ rate_chart.line }}"></polyline>
+    {% for p in rate_chart.points %}
+    <circle class="netdot {{ 'netnow' if loop.last }}" cx="{{ p.x }}" cy="{{ p.y }}"
+            r="{{ 4.2 if loop.last else 3 }}"></circle>
+    {% endfor %}
+    {% for l in rate_chart.labels %}
+    <text class="xlab" x="{{ l.x }}" y="192">{{ l.text }}</text>
+    {% endfor %}
+  </svg>
+
+  <div class="stats">
+    <div><div class="l">Average</div><div class="v n">{{ rate.average }}%</div>
+      <div class="d">over {{ rate.months_counted }} month{{ 's' if rate.months_counted != 1 }}</div></div>
+    <div><div class="l">Best</div><div class="v n pos">{{ rate.best }}%</div>
+      <div class="d">kept the most</div></div>
+    <div><div class="l">Worst</div>
+      <div class="v n {{ 'neg' if rate.worst < 0 else '' }}">{{ rate.worst }}%</div>
+      <div class="d">kept the least</div></div>
+  </div>
+  {% else %}
+  <div class="emptychart">
+    <p class="t">Not enough months yet</p>
+    <p class="d">A rate needs income to measure against, and a line needs two
+      months of it. Months with no income recorded are left out rather than
+      drawn as zero — they would pull the line to the floor for a month that
+      simply had not been paid yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="dh">
+    <h2>Where the spending goes</h2>
+    <span class="muted">{{ month_count }} months, biggest categories</span>
+  </div>
+
+  {% if trend_chart.columns %}
+  <svg class="chart" viewBox="0 0 620 200" role="img"
+       aria-label="Stacked monthly spending by category over {{ month_count }} months.">
+    <line class="grid" x1="44" y1="10" x2="614" y2="10"></line>
+    <line class="grid" x1="44" y1="87.5" x2="614" y2="87.5"></line>
+    <line class="zero" x1="44" y1="165" x2="614" y2="165"></line>
+    {% for col in trend_chart.columns %}
+      {% for band in col.bands %}
+      <rect x="{{ col.x }}" y="{{ band.y }}" width="{{ col.width }}"
+            height="{{ band.height }}" fill="{{ band.colour }}">
+        <title>{{ band.name }} · {{ band.cents | money }} in {{ col.label }}</title>
+      </rect>
+      {% endfor %}
+    <text class="xlab" x="{{ col.x + col.width / 2 }}" y="192">{{ col.label }}</text>
+    {% endfor %}
+  </svg>
+
+  <div class="legend">
+    {% for s in trend.series %}
+    <span><i style="background: {{ s.colour }}"></i>{{ s.name }}
+      <strong class="n">{{ s.total | money }}</strong></span>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="emptychart">
+    <p class="t">Nothing to chart yet</p>
+    <p class="d">Spending filed under a category shows up here.</p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="dh">
+    <h2>Where {{ this_month_name }}'s money went</h2>
+    <span class="muted">Income on the left, where it ended up on the right</span>
+  </div>
+
+  {% if flow_chart.ribbons %}
+  <svg class="chart sankey" viewBox="-2 -2 {{ flow_chart.width + 4 }} {{ flow_chart.height + 4 }}"
+       role="img"
+       aria-label="{{ flow.income_cents | money }} of income, {{ flow.spent_cents | money }} spent and {{ flow.kept_cents | money }} kept.">
+    {% for r in flow_chart.ribbons %}
+    <path d="{{ r.path }}" fill="{{ r.colour }}" opacity="0.26">
+      <title>{{ r.source }} → {{ r.destination }}</title>
+    </path>
+    {% endfor %}
+    {% for n in flow_chart.sources %}
+    <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ flow_chart.bar }}"
+          height="{{ n.height }}" rx="2" fill="var(--good)"></rect>
+    <text class="sklab" x="{{ n.x + flow_chart.bar + 6 }}" y="{{ n.mid + 4 }}"
+      >{{ n.name }} · {{ n.cents | money }}</text>
+    {% endfor %}
+    {% for n in flow_chart.destinations %}
+    <rect x="{{ n.x }}" y="{{ n.y }}" width="{{ flow_chart.bar }}"
+          height="{{ n.height }}" rx="2" fill="{{ n.colour }}"></rect>
+    <text class="sklab end" x="{{ n.x - 6 }}" y="{{ n.mid + 4 }}"
+      >{{ n.name }} · {{ n.cents | money }}</text>
+    {% endfor %}
+  </svg>
+  {% if flow.overspent %}
+  <p class="notice" style="margin-top:var(--s-3)">
+    {{ this_month_name }} spent {{ (-flow.kept_cents) | money }} more than it
+    earned, so there is nothing kept to show. The ribbons add up to more than
+    the income they come from — the difference came out of savings or a card.
+  </p>
+  {% endif %}
+  {% else %}
+  <div class="emptychart">
+    <p class="t">No flow to draw</p>
+    <p class="d">This needs income and spending in the same month, both filed
+      under a category. A month with one and not the other has no flow — and
+      drawing one anyway would imply the spending came from somewhere it did
+      not.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

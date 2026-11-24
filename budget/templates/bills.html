@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Bills{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">Bills</div>
+    <h1>{{ month_name }}</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('bills.index', month=prev_month) }}">← {{ prev_month }}</a>
+    <a class="button secondary" href="{{ url_for('bills.index', month=next_month) }}">{{ next_month }} →</a>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Due this month</div>
+    <div class="v n">{{ summary.total_cents | money }}</div>
+    <div class="d">{{ summary.count }} bill{{ 's' if summary.count != 1 }}</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Already paid</div>
+    <div class="v n g">{{ summary.paid_cents | money }}</div>
+    <div class="d">{{ summary.paid_count }} of {{ summary.count }} posted</div>
+  </div>
+  <div class="statcard">
+    <div class="l">Still to come</div>
+    <div class="v n {{ 'o' if summary.due_cents else '' }}">{{ summary.due_cents | money }}</div>
+    <div class="d">{{ summary.count - summary.paid_count }} not yet posted</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="dh">
+    <h2>Calendar</h2>
+    <span class="muted">Posted bills are solid, the rest are expected</span>
+  </div>
+
+  <div style="overflow-x:auto">
+    <table class="calmonth">
+      <caption class="visually-hidden">Bills due in {{ month_name }}</caption>
+      <thead>
+        <tr>
+          <th scope="col"><abbr title="Sunday">Su</abbr></th>
+          <th scope="col"><abbr title="Monday">Mo</abbr></th>
+          <th scope="col"><abbr title="Tuesday">Tu</abbr></th>
+          <th scope="col"><abbr title="Wednesday">We</abbr></th>
+          <th scope="col"><abbr title="Thursday">Th</abbr></th>
+          <th scope="col"><abbr title="Friday">Fr</abbr></th>
+          <th scope="col"><abbr title="Saturday">Sa</abbr></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for week in weeks %}
+        <tr>
+          {% for cell in week %}
+          <td class="calday{{ ' outside' if cell.outside }}{{ ' istoday' if cell.today }}">
+            <span class="dnum">{{ cell.day }}</span>
+            {% for b in cell.bills %}
+            <span class="billchip {{ 'paid' if b.paid else 'due' }}"
+                  title="{{ b.name }} · {{ b.amount_cents | abs | money }}{{ ' · posted' if b.paid else ' · expected' }}">
+              <span class="bn">{{ b.name }}</span>
+              <span class="ba n">{{ b.amount_cents | abs | money }}</span>
+            </span>
+            {% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if price_changes %}
+<div class="card" style="border-color:var(--warn)">
+  <h2>Prices that changed ({{ price_changes | length }})</h2>
+  <p class="muted">Compared with the previous time each one went out. Shown for
+    bills you already set up as well as ones you did not — a subscription going
+    up is most interesting when it is one you stopped thinking about.</p>
+  <table class="rows">
+    <thead><tr><th>Bill</th><th>Was</th><th>Now</th><th>Change</th>
+               <th class="right">Seen</th></tr></thead>
+    <tbody>
+      {% for p in price_changes %}
+      <tr>
+        <td>{{ p.merchant }} <span class="tag">{{ p.cadence }}</span></td>
+        <td class="n">{{ p.was_cents | abs | money }}</td>
+        <td class="n">{{ p.now_cents | abs | money }}</td>
+        <td class="n {{ 'neg' if p.change_cents < 0 else 'pos' }}">
+          {{ (-p.change_cents) | money_signed }}</td>
+        <td class="right muted nowrap">{{ p.changed_on }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if suggestions %}
+<div class="card" id="suggestions">
+  <h2>Regular payments you have not set up ({{ suggestions | length }})</h2>
+  <p class="muted">Found by looking for the same merchant at a steady interval
+    for a similar amount, at least three times. Adding one puts it on this
+    calendar and into the paycheck plan; nothing is added until you say so.</p>
+  {% for s in suggestions %}
+  <div class="brow suggest">
+    <div>
+      <div class="cn">{{ s.merchant }}</div>
+      <div class="cs n">{{ s.amount_cents | abs | money }} ·
+        {{ s.cadence }} · seen {{ s.occurrences }} times ·
+        <span class="nowrap">next expected {{ s.next_expected }}</span></div>
+    </div>
+    <span class="lf">
+      <form method="post" action="{{ url_for('bills.accept_suggestion') }}"
+            class="inline-form">
+        {{ csrf_field() }}
+        <input type="hidden" name="merchant" value="{{ s.merchant }}">
+        <input type="hidden" name="amount_cents" value="{{ s.amount_cents }}">
+        <input type="hidden" name="cadence" value="{{ s.cadence }}">
+        <input type="hidden" name="next_expected" value="{{ s.next_expected }}">
+        <input type="hidden" name="category_id" value="{{ s.category_id or '' }}">
+        <button type="submit">Add as a bill</button>
+      </form>
+    </span>
+    <span>
+      <form method="post" action="{{ url_for('bills.dismiss_suggestion') }}"
+            class="inline-form">
+        {{ csrf_field() }}
+        <input type="hidden" name="merchant" value="{{ s.merchant }}">
+        <button type="submit" class="secondary">Not a bill</button>
+      </form>
+    </span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if skipped %}
+<details class="card manage" id="skipped">
+  <summary>Not suggesting ({{ skipped | length }})</summary>
+  <p class="muted">Merchants you said were not bills. Restoring one puts it back
+    in the list above if it still looks regular.</p>
+  {% for name in skipped %}
+  <div class="cline">
+    <span class="m">{{ name }}</span>
+    <form method="post" action="{{ url_for('bills.restore_suggestion') }}">
+      {{ csrf_field() }}
+      <input type="hidden" name="merchant" value="{{ name }}">
+      <button type="submit" class="linklike">Suggest it again</button>
+    </form>
+  </div>
+  {% endfor %}
+</details>
+{% endif %}
+
+<div class="card">
+  <div class="dh">
+    <h2>Every bill, in order</h2>
+    <a href="{{ url_for('settings.index', section='budgeting') }}#recurring">Edit recurring items</a>
+  </div>
+  {% if bills %}
+  <table class="rows">
+    <thead><tr><th>Due</th><th>Bill</th><th>Category</th><th>Status</th>
+               <th class="right">Amount</th></tr></thead>
+    <tbody>
+      {% for b in bills %}
+      <tr>
+        <td class="muted nowrap">{{ b.date }}</td>
+        <td>{{ b.name }}</td>
+        <td class="muted">{% if b.category %}<span class="nameline">{{
+            glyph(b.cat_icon, b.cat_colour, size='sm') }}{{ b.category }}</span>
+          {%- else %}—{% endif %}</td>
+        <td>{% if b.paid %}<span class="tag paid">posted</span>
+            {%- else %}<span class="tag">expected</span>{% endif %}</td>
+        <td class="right neg">{{ b.amount_cents | money_signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No recurring items fall in {{ month_name }}. Add your rent,
+    subscriptions and other regular bills as recurring items in
+    <a href="{{ url_for('settings.index', section='budgeting') }}#recurring">Settings</a> and they
+    show up here, and on the paycheck plan.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

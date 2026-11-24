@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Household{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">Security</div>
+    <h1>Household</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('settings.index', section='general') }}#security">← Settings</a>
+  </div>
+</div>
+
+<div class="card" id="people">
+  <h2>Who can log in</h2>
+  <p class="muted">
+    Everyone here sees and edits the same accounts, transactions and budgets —
+    that is what sharing a household's finances means. Each person has their
+    own name and password, and their own remembered devices.
+  </p>
+  <table class="rows">
+    <thead><tr><th>Name</th><th>Last logged in</th><th></th></tr></thead>
+    <tbody>
+      <tr>
+        <td>{{ owner_name }} <span class="tag">owner</span></td>
+        <td class="muted">—</td>
+        <td></td>
+      </tr>
+      {% for m in members %}
+      <tr>
+        <td>{{ m.name }}</td>
+        <td class="muted">{{ (m.last_login_at or 'never')[:10] }}</td>
+        <td class="nowrap actions">
+          {% if person.is_owner %}
+          <form method="post" class="inline-form"
+                action="{{ url_for('household.reset_member_password', member_id=m.id) }}">
+            {{ csrf_field() }}
+            <input type="password" name="password" minlength="{{ min_length }}"
+                   placeholder="new password" autocomplete="new-password" required
+                   aria-label="New password for {{ m.name }}">
+            <button type="submit" class="secondary">Set password</button>
+          </form>
+          <form method="post" class="inline-form"
+                action="{{ url_for('household.remove', member_id=m.id) }}"
+                onsubmit="return confirm('Remove this person? They will be signed out everywhere.');">
+            {{ csrf_field() }}
+            <button type="submit" class="linklike">remove</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if person.is_owner %}
+  <hr class="soft">
+  <form method="post" action="{{ url_for('household.add') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Name <input type="text" name="name" maxlength="{{ max_name }}"
+                       placeholder="Sam" autocomplete="off" required></label>
+    <label>A password to start with
+      <input type="password" name="password" minlength="{{ min_length }}"
+             autocomplete="new-password" required>
+    </label>
+    <button type="submit">Add to household</button>
+  </form>
+  <p class="muted">Tell them the name and password yourself. They log in with
+     both, and can change the password on this page afterwards. You log in by
+     leaving the name blank.</p>
+  {% else %}
+  <p class="muted">Only {{ owner_name }} can add or remove people.</p>
+  {% endif %}
+</div>
+
+<div class="card" id="password">
+  <h2>Change your password</h2>
+  <p class="muted">Signed in as <strong>{{ person.name }}</strong>. Changing
+     your password signs you out on every other device, and forgets the
+     devices you had remembered.</p>
+  <form method="post" action="{{ url_for('household.change_password') }}" class="form-row">
+    {{ csrf_field() }}
+    <label>Current password
+      <input type="password" name="current" autocomplete="current-password" required>
+    </label>
+    <label>New password <span class="muted">(at least {{ min_length }} characters)</span>
+      <input type="password" name="new_password" minlength="{{ min_length }}"
+             autocomplete="new-password" required>
+    </label>
+    <label>New password again
+      <input type="password" name="confirm" minlength="{{ min_length }}"
+             autocomplete="new-password" required>
+    </label>
+    <button type="submit">Change password</button>
+  </form>
+</div>
+{% endblock %}

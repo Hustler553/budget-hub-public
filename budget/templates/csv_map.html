@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Import a CSV{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">{{ row_count }} row{{ 's' if row_count != 1 }} in this file</div>
+    <h1>Which column is which?</h1>
+  </div>
+  <div class="acts">
+    <a class="button secondary" href="{{ url_for('transactions.index') }}">← Transactions</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>The first rows of your file</h2>
+  <p class="muted">Every bank lays its export out differently, so say which
+     column holds what. Your answers are remembered for the next file with
+     these same columns.</p>
+  <table>
+    <thead><tr>{% for h in headers %}<th>{{ h or '(no name)' }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in preview %}
+      <tr>{% for h in headers %}<td>{{ row[loop.index0] if loop.index0 < row | length else '' }}</td>{% endfor %}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Import it</h2>
+  <form method="post" action="{{ url_for('transactions.import_csv_mapped') }}">
+    {{ csrf_field() }}
+    <textarea name="csv_text" hidden>{{ csv_text }}</textarea>
+
+    {% macro column(role, label, optional=false) %}
+    <label>{{ label }}
+      <select name="{{ role }}">
+        <option value="">{{ '(none)' if optional else 'Choose…' }}</option>
+        {% for h in headers %}
+        <option value="{{ loop.index0 }}" {{ 'selected' if mapping.get(role) == loop.index0 }}>{{ h or '(no name)' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endmacro %}
+
+    <div class="form-row">
+      {{ column('date', 'Date') }}
+      {{ column('merchant', 'Description or merchant') }}
+      {{ column('note', 'Note', optional=true) }}
+    </div>
+
+    <div class="form-row">
+      {{ column('amount', 'Amount', optional=true) }}
+      <label>In that column, spending is
+        <select name="spending">
+          <option value="negative" {{ 'selected' if mapping.get('spending') != 'positive' }}>negative (-12.34)</option>
+          <option value="positive" {{ 'selected' if mapping.get('spending') == 'positive' }}>positive (12.34)</option>
+        </select>
+      </label>
+    </div>
+    <p class="muted">Or, if your bank puts money out and money in in separate
+       columns, leave Amount empty and choose those two instead.</p>
+    <div class="form-row">
+      {{ column('debit', 'Money out', optional=true) }}
+      {{ column('credit', 'Money in', optional=true) }}
+    </div>
+
+    <div class="form-row">
+      <label>File these under
+        <select name="account_id">
+          <option value="">Unassigned</option>
+          {% for a in account_choices %}
+          <option value="{{ a.id }}" {{ 'selected' if a.id == account_id }}>
+            {{ a.name }}{{ ' (bank-connected)' if a.id in plaid_backed }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="day_first" value="1" {{ 'checked' if mapping.get('day_first') }}>
+        Dates are day first (03/04 is 3 April)
+      </label>
+    </div>
+    {% if plaid_backed %}
+    <p class="muted">An account marked bank-connected already receives its
+       transactions from the bank. Import a CSV into one only for history from
+       before it was connected, or the same purchases will appear twice.</p>
+    {% endif %}
+
+    <button type="submit">Import {{ row_count }} row{{ 's' if row_count != 1 }}</button>
+    <a href="{{ url_for('transactions.index') }}" class="button secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+<svg class="chart" viewBox="0 0 620 200" role="img"
+     aria-label="Income and spending bars for the last {{ chart | length }} months, with a line showing what was kept each month.">
+  <line class="grid" x1="44" y1="10" x2="614" y2="10"></line>
+  <line class="grid" x1="44" y1="48.75" x2="614" y2="48.75"></line>
+  <line class="grid" x1="44" y1="87.5" x2="614" y2="87.5"></line>
+  <line class="grid" x1="44" y1="126.25" x2="614" y2="126.25"></line>
+  <line class="zero" x1="44" y1="165" x2="614" y2="165"></line>
+
+  {% for e in chart %}
+    <g class="{{ 'now' if e.is_current }}">
+      <rect class="bin" x="{{ e.in_x }}" y="{{ e.in_y }}"
+            width="{{ e.bar_w }}" height="{{ e.in_h }}" rx="2.5"></rect>
+      <rect class="bout" x="{{ e.out_x }}" y="{{ e.out_y }}"
+            width="{{ e.bar_w }}" height="{{ e.out_h }}" rx="2.5"></rect>
+    </g>
+  {% endfor %}
+
+  <polyline class="netline" points="
+    {%- for e in chart -%}
+      {{ e.cx }},{{ e.net_y }}{{ ' ' if not loop.last }}
+    {%- endfor -%}"></polyline>
+  {% for e in chart %}
+    <circle class="netdot {{ 'netnow' if e.is_current }}"
+            cx="{{ e.cx }}" cy="{{ e.net_y }}"
+            r="{{ 4.2 if e.is_current else 3.4 }}"></circle>
+  {% endfor %}
+
+  {% for e in chart %}
+    <text class="xlab {{ 'now' if e.is_current }}"
+          x="{{ e.cx }}" y="192">{{ e.label }}</text>
+  {% endfor %}
+</svg>
+
+<div class="legend">
+  <span><i class="income"></i>Income</span>
+  <span><i class="spend"></i>Spending</span>
+  <span><i class="now"></i>This month</span>
+  <span><i class="ln kept"></i>Kept (income &minus; spending)</span>
+</div>
+
+<div class="stats">
+  <div><div class="l">Avg income</div><div class="v n">{{ chart_stats.avg_income | money }}</div>
+    <div class="d">per month</div></div>
+  <div><div class="l">Avg spending</div><div class="v n">{{ chart_stats.avg_spending | money }}</div>
+    <div class="d">per month</div></div>
+  <div><div class="l">Avg kept</div>
+    <div class="v n {{ 'neg' if chart_stats.avg_kept < 0 else 'pos' }}">{{ chart_stats.avg_kept | money_signed }}</div>
+    <div class="d">{{ chart_stats.kept_pct }}% of income</div></div>
+  <div><div class="l">Best month</div><div class="v n">{{ chart_stats.best_label }}</div>
+    <div class="d">kept {{ chart_stats.best_kept | money }}</div></div>
+  <div class="tk"><div class="l">Kept · {{ chart_stats.months }} months</div>
+    <div class="v n {{ 'neg' if chart_stats.total_kept < 0 else 'pos' }}">{{ chart_stats.total_kept | money_signed }}</div>
+    <div class="d">running total, this month included</div></div>
+</div>

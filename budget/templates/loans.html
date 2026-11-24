@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Loans{% endblock %}
+{% block content %}
+
+<div class="eyebrow">Calculators</div>
+<h1>Loans</h1>
+
+<div class="card">
+  <h2>What would a loan cost?</h2>
+  <p class="muted">
+    Nothing here is saved. Put in any amount, rate and term — including a loan
+    you have not taken — and see the payment and what the interest comes to.
+  </p>
+
+  <form method="get" action="{{ url_for('moneymath.loans_page') }}" class="form-row">
+    <label>Borrowing
+      <input type="text" name="amount" inputmode="decimal"
+             value="{{ fields.amount }}"></label>
+    <label>Rate a year
+      <input type="text" name="rate" inputmode="decimal"
+             value="{{ fields.rate }}"></label>
+    <label>Over, in years
+      <input type="text" name="years" inputmode="numeric" size="4"
+             value="{{ fields.years }}"></label>
+    <label>Paying extra each month
+      <input type="text" name="extra" inputmode="decimal"
+             value="{{ fields.extra }}"></label>
+    <button type="submit">Work it out</button>
+  </form>
+
+  {% if quote and not quote.impossible %}
+  <div class="brow">
+    <div><div class="cn">Payment each month</div>
+      <div class="cs">principal and interest</div></div>
+    <span class="lf n">{{ quote.payment_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Paid in total</div>
+      <div class="cs">over {{ quote.periods }} payments, {{ quote.years }} years</div></div>
+    <span class="lf n">{{ quote.total_paid_cents | money }}</span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Of which interest</div>
+      <div class="cs">what the borrowing costs</div></div>
+    <span class="lf n o">{{ quote.total_interest_cents | money }}</span>
+  </div>
+  {% if quote.saved and quote.saved.periods %}
+  <p class="muted">
+    Paying {{ fields.extra }} extra each month finishes it
+    <strong>{{ quote.saved.periods }} payments sooner</strong> and saves
+    <strong>{{ quote.saved.interest_cents | money }}</strong> of interest.
+  </p>
+  {% endif %}
+  {% elif quote and quote.impossible %}
+  <p class="muted">
+    At that rate the payment would never clear the debt. {{ quote.impossible }}
+  </p>
+  {% endif %}
+  {% if fields.years | int >= max_years %}
+  <p class="muted">Terms are modelled up to {{ max_years }} years.</p>
+  {% endif %}
+</div>
+
+{% if quote and not quote.impossible %}
+<div class="card">
+  {% set toggle_base = url_for('moneymath.loans_page') ~ '?amount=' ~ fields.amount
+     ~ '&rate=' ~ fields.rate ~ '&years=' ~ fields.years ~ '&extra=' ~ fields.extra ~ '&' %}
+  {% with rows = quote.schedule, annual = quote.annual %}
+    {% include "_schedule.html" %}
+  {% endwith %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Loans you are paying</h2>
+
+  {% if loans %}
+  {% for loan, model in loans %}
+  <details class="cat account" id="loan-{{ loan.id }}">
+    <summary>
+      <div class="brow">
+        <div>
+          <div class="cn">{{ loan.name }}</div>
+          <div class="cs">{{ loan.kind | capitalize }}{% if loan.purpose %} ·
+            {{ loan.purpose }}{% endif %}{% if loan.account_name %} ·
+            {{ loan.account_name }}{% endif %}
+            {%- if loan.balance_source == 'lender' %} ·
+              <span class="cp n">from your lender{% if loan.balance_as_of %},
+                {{ loan.balance_as_of }}{% endif %}</span>
+            {%- elif loan.balance_as_of %} · you set this
+              {{ loan.balance_as_of }}
+            {%- else %} · <span class="cp w">balance never dated</span>{% endif %}</div>
+        </div>
+        <div class="rl cs">
+          {%- if model.impossible %}the payment never clears it
+          {%- else %}{{ model.periods }} payments left, {{ model.years }} years ·
+            {{ model.total_interest_cents | money }} of interest to come
+            {%- if loan.escrow_cents %} · plus {{ loan.escrow_cents | money }}
+              escrow a month{% endif %}
+            {%- if model.saved and model.saved.periods %} ·
+              extra saves {{ model.saved.interest_cents | money }}{% endif %}
+          {%- endif %}
+        </div>
+        <span class="lf n o">{{ loan.balance_cents | money }}</span>
+      </div>
+    </summary>
+    <div class="catlist">
+      <form method="post" action="{{ url_for('moneymath.loans_update', loan_id=loan.id) }}"
+            class="form-row">
+        {{ csrf_field() }}
+        <label>Name <input type="text" name="name" value="{{ loan.name }}" required></label>
+        <label>For <input type="text" name="purpose" value="{{ loan.purpose }}"></label>
+        <label>Kind
+          <select name="kind">
+            {% for k in kinds %}
+            <option value="{{ k }}"{{ ' selected' if k == loan.kind }}>{{ k | capitalize }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Still owing
+          <input type="text" name="principal" inputmode="decimal"
+                 value="{{ '%.2f' | format(loan.principal_cents / 100) }}"></label>
+        {%- if loan.balance_source == 'lender' %}
+        <p class="muted">Your lender reports
+          <strong>{{ loan.balance_cents | money }}</strong>, and that is what
+          the schedule uses. The figure above is only used if this loan stops
+          being connected.</p>
+        {%- endif %}
+        <label>Rate a year
+          <input type="text" name="rate" inputmode="decimal"
+                 value="{{ loan.annual_rate_e4 | rate_e4 }}"></label>
+        <label>Payment (principal and interest only)
+          <input type="text" name="payment" inputmode="decimal"
+                 value="{{ '%.2f' | format(loan.payment_cents / 100) }}"></label>
+        <label>Escrow each month
+          <input type="text" name="escrow" inputmode="decimal"
+                 value="{{ '%.2f' | format(loan.escrow_cents / 100) }}"></label>
+        <label>Extra each month
+          <input type="text" name="extra" inputmode="decimal"
+                 value="{{ '%.2f' | format(loan.extra_cents / 100) }}"></label>
+        <button type="submit">Save</button>
+      </form>
+      <p class="muted">
+        If your mortgage payment includes taxes and insurance, put only the
+        principal-and-interest part in the payment box and the rest in escrow.
+        Entered whole, the schedule shows the balance falling far faster than
+        it really does — on a $300,000 mortgage that reads as ten years
+        shorter and $80,000 cheaper than it is.
+      </p>
+      <p>
+        <a class="button secondary"
+           href="{{ url_for('moneymath.loans_schedule', loan_id=loan.id) }}">See
+          the full schedule</a>
+      </p>
+      <form method="post" action="{{ url_for('moneymath.loans_delete', loan_id=loan.id) }}"
+            class="inline-form"
+            onsubmit="return confirm('Remove this loan? Its account and transactions stay.');">
+        {{ csrf_field() }}
+        <button type="submit" class="secondary">Remove</button>
+      </form>
+    </div>
+  </details>
+  {% endfor %}
+  {% else %}
+  <p class="muted">No loans yet. Add one below to keep its schedule here.</p>
+  {% endif %}
+
+  <details class="addbox">
+    <summary>Add a loan</summary>
+    <form method="post" action="{{ url_for('moneymath.loans_add') }}" class="form-row">
+      {{ csrf_field() }}
+      <label>Name <input type="text" name="name" required></label>
+      <label>For <input type="text" name="purpose"></label>
+      <label>Kind
+        <select name="kind">
+          {% for k in kinds %}<option value="{{ k }}">{{ k | capitalize }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Still owing
+        <input type="text" name="principal" inputmode="decimal"></label>
+      <label>Rate a year
+        <input type="text" name="rate" inputmode="decimal"></label>
+      <label>Payment (principal and interest only)
+        <input type="text" name="payment" inputmode="decimal"></label>
+      <label>Escrow each month
+        <input type="text" name="escrow" inputmode="decimal"></label>
+      <label>Extra each month
+        <input type="text" name="extra" inputmode="decimal"></label>
+      {% if account_choices %}
+      <label>Account
+        <select name="account_id">
+          <option value="">Not linked to an account</option>
+          {% for a in account_choices %}
+          <option value="{{ a.id }}">{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endif %}
+      <button type="submit">Add loan</button>
+    </form>
+  </details>
+</div>
+
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Paycheck{% endblock %}
+{% block content %}
+
+<div class="phead">
+  <div>
+    <div class="eyebrow">This pay period</div>
+    <h1>Paycheck plan</h1>
+  </div>
+</div>
+
+{% include "_paycheck_banner.html" %}
+
+{% if not configured %}
+<div class="card">
+  <p>To use paycheck planning, tell the tool about your paycheck first:</p>
+  <ol>
+    <li>Go to <a href="{{ url_for('settings.index', section='budgeting') }}#paycheck">Settings → Paycheck</a>.</li>
+    <li>Enter how often you're paid, how much, and the date of any recent payday.</li>
+    <li>Add your bills (rent, subscriptions...) as recurring items so they can be
+        assigned to pay periods automatically.</li>
+  </ol>
+</div>
+{% else %}
+
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Safe to spend</div>
+    <div class="v n {{ 'o' if safe_to_spend < 0 else 'g' }}">{{ safe_to_spend | money }}</div>
+    <div class="d">{% if days_left > 0 %}≈ {{ per_day | money }} a day until payday
+      {% else %}payday today{% endif %}</div>
+  </div>
+  <div class="statcard">
+    <div class="l">{{ period_start.strftime('%b %d') }} → {{ next_payday.strftime('%b %d') }}</div>
+    <div class="v n">{{ days_left }}</div>
+    <div class="bar lg"><i class="idle" style="width: {{ pct_elapsed }}%"></i></div>
+    <div class="d">day{{ 's' if days_left != 1 }} until next payday</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Where this period's money goes</h2>
+  <div class="brow">
+    <div><div class="cn">Income</div>
+      <div class="cs">{% if income_is_observed %}received this period
+        {%- else %}expected &#183; {{ observed_income | money }} arrived so far{% endif %}</div></div>
+    <div class="rl"></div>
+    <span class="lf n">{{ income_used | money }}</span><span></span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Bills this period</div><div class="cs">paid and upcoming</div></div>
+    <div class="rl"></div>
+    <span class="lf n">{{ bills_total | money }}</span><span></span>
+  </div>
+  <div class="brow">
+    <div><div class="cn">Spent so far</div><div class="cs">everything else</div></div>
+    <div class="rl"></div>
+    <span class="lf n">{{ variable_spent | money }}</span><span></span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Bills covered by this paycheck</h2>
+  {% if bills %}
+  <table class="tight">
+    <thead><tr><th>Bill</th><th>Due</th><th>Status</th><th class="right">Amount</th></tr></thead>
+    <tbody>
+      {% for b in bills %}
+      <tr>
+        <td>{{ b.name }}</td>
+        <td class="muted">{{ b.date }}</td>
+        <td>{% if b.paid %}<span class="tag paid">posted</span>{% else %}<span class="tag">upcoming</span>{% endif %}</td>
+        <td class="right neg">{{ b.amount_cents | money_signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No recurring bills fall in this pay period. Add bills as
+     recurring items in <a href="{{ url_for('settings.index', section='budgeting') }}#recurring">Settings</a>
+     so they show up here.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>How “safe to spend” is calculated</h2>
+  <table class="calc">
+    {% if income_is_observed %}
+    <tr><td>Income received this period
+        {%- if extra_income and paycheck_is_actual %}
+        <span class="muted">(paycheck + {{ extra_income | money }} besides)</span>{% endif %}</td>
+        <td class="right pos">{{ income_used | money }}</td></tr>
+    {% else %}
+    <tr><td>Paycheck <span class="muted">(expected)</span></td>
+        <td class="right pos">{{ income_used | money }}</td></tr>
+      {% if observed_income %}
+    <tr><td class="muted">of which {{ observed_income | money }} has arrived so far</td>
+        <td></td></tr>
+      {% endif %}
+    {% endif %}
+    <tr><td>Bills in this period (paid + upcoming)</td><td class="right neg">− {{ bills_total | money }}</td></tr>
+    <tr><td>Everything else spent so far</td><td class="right neg">− {{ variable_spent | money }}</td></tr>
+    <tr class="total"><td>Safe to spend until {{ next_payday.strftime('%b %d') }}</td>
+        <td class="right {{ 'pos' if safe_to_spend >= 0 else 'neg' }}">{{ safe_to_spend | money }}</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Payday check-in</h2>
+  <form method="post" action="{{ url_for('paycheck.confirm_setting') }}" class="inline-form">
+    {{ csrf_field() }}
+    <label class="checkbox">
+      <input type="checkbox" name="enabled" {{ 'checked' if confirm_enabled }}>
+      Ask me to confirm my paycheck amount on payday
+    </label>
+    <button type="submit" class="secondary">Save</button>
+  </form>
+  <p class="muted">For when your pay varies by a few dollars each period. The
+     paycheck still posts on its own at the usual amount — this just adds a
+     prompt on payday to correct it to what actually landed, so the month's
+     figures are exact. Leave it off and nothing changes.</p>
+</div>
+
+{% endif %}
+{% endblock %}

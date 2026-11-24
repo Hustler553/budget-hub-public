@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="phead">
+  <div>
+    <div class="eyebrow">Overview</div>
+    <h1>{{ month_name }}</h1>
+  </div>
+  <div class="acts">
+    <a class="button" href="{{ url_for('transactions.index') }}">Add a transaction</a>
+  </div>
+</div>
+
+{% include "_paycheck_banner.html" %}
+
+<div class="hero">
+  <div class="statcard">
+    <div class="l">Earned</div>
+    <div class="v n">{{ income | money }}</div>
+    <div class="d">This month's income</div>
+  </div>
+
+  <div class="statcard"
+       {%- if pending_cents %}
+       data-pend-posted="{{ spending | money }}"
+       data-pend-total="{{ (spending + pending_cents) | money }}"
+       data-pend-posted-pct="{{ (spending / income * 100) | round | int if income > 0 else 0 }}"
+       data-pend-total-pct="{{ ((spending + pending_cents) / income * 100) | round | int if income > 0 else 0 }}"
+       {%- endif %}>
+    <div class="l">Spent</div>
+    <div class="v n" data-pend-amount>{{ spending | money }}</div>
+    <div class="bar lg">
+      <i class="idle" data-pend-bar
+         style="width: {{ (spending / income * 100) | round | int if income > 0 else 0 }}%"></i>
+    </div>
+    <div class="d">
+      {% if income > 0 %}<span data-pend-pct>{{ (spending / income * 100) | round | int }}</span>% of what you earned
+      {% else %}no income recorded yet{% endif %}
+    </div>
+    {% if pending_cents %}
+    <label class="checkbox">
+      <input type="checkbox" data-pend-toggle>
+      add {{ pending_cents | money }} pending
+    </label>
+    {% endif %}
+  </div>
+
+  <div class="statcard"
+       {%- if pending_cents %}
+       data-pend-posted="{{ net | money_signed }}"
+       data-pend-total="{{ (net - pending_cents) | money_signed }}"
+       data-pend-posted-sign="{{ 'o' if net < 0 else 'g' }}"
+       data-pend-total-sign="{{ 'o' if (net - pending_cents) < 0 else 'g' }}"
+       data-pend-posted-pct="{{ (net / income * 100) | round | int if income > 0 else 0 }}"
+       data-pend-total-pct="{{ ((net - pending_cents) / income * 100) | round | int if income > 0 else 0 }}"
+       {%- endif %}>
+    <div class="l">Net kept</div>
+    <div class="v n {{ 'o' if net < 0 else 'g' }}" data-pend-amount>{{ net | money_signed }}</div>
+    <div class="d">
+      {% if income > 0 %}<span data-pend-pct>{{ (net / income * 100) | round | int }}</span>% of your income kept
+      {% else %}nothing to measure against yet{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if over_rows %}
+<a class="alert" href="#budgets">
+  <span class="bg">Over</span>
+  <span class="tx">
+    {% if over_rows | length == 1 %}
+      {{ over_rows[0].name }} is {{ (-over_rows[0].remaining_cents) | money }} over
+      <em>{{ over_rows[0].spent_cents | money }} spent against a
+          {{ over_rows[0].budget_cents | money }} budget</em>
+    {% else %}
+      {{ over_rows | length }} categories are over budget
+      <em>{{ over_rows | map(attribute='name') | join(', ') }}</em>
+    {% endif %}
+  </span>
+</a>
+{% endif %}
+
+{% if uncategorized_count or review_count %}
+<div class="notice" style="margin-bottom:var(--s-3)">
+  {% if uncategorized_count %}
+    <a href="{{ url_for('transactions.index', category='none') }}">
+      {{ uncategorized_count }} transaction{{ 's need' if uncategorized_count != 1 else ' needs' }} a category</a>{% if review_count %} ·{% endif %}
+  {% endif %}
+  {% if review_count %}
+    <a href="{{ url_for('transactions.index') }}#review">
+      {{ review_count }} email{{ 's' if review_count != 1 }} need review</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="cols">
+  <div class="wide">
+    <div class="card" id="budgets">
+      <div class="dh">
+        <h3>Budgets · worst first</h3>
+        <a href="{{ url_for('budget.index') }}">Edit budgets</a>
+      </div>
+
+      {% for c in budget_rows %}
+      <details class="cat">
+        <summary>
+          <div class="brow {{ 'is-over' if c.status == 'over' }}">
+            <div class="rowlead">
+              {{ glyph(c.icon, c.colour) }}
+              <div class="tx">
+                <div class="cn">{{ c.name }}</div>
+                <div class="cs n">
+                  {% if c.budget_cents %}{{ c.spent_cents | money }} of {{ c.budget_cents | money }}
+                  {% else %}{{ c.spent_cents | money }} spent{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="rl">
+              {% if c.budget_cents %}
+              <div class="bar"><i class="{{ 'o' if c.status == 'over' else 'w' if c.status == 'tight' else 'g' }}"
+                                  style="width: {{ c.pct }}%"></i></div>
+              {% endif %}
+            </div>
+            <span class="lf n {{ 'o' if c.status == 'over' }}">
+              {% if c.budget_cents %}{{ c.remaining_cents | money_signed }}{% else %}—{% endif %}
+            </span>
+            <span class="cp {{ 'o' if c.status == 'over' else 'w' if c.status == 'tight'
+                                else 'g' if c.status == 'ontrack' else 'n' }}">
+              {{ {'over':'Over','tight':'Tight','ontrack':'On track','nobudget':'No budget'}[c.status] }}
+            </span>
+          </div>
+        </summary>
+        <div class="catlist">
+          {% for t in breakdown.get(c.id, []) %}
+          <div class="cline">
+            <span class="m">{{ t.merchant or t.note or '—' }}</span>
+            <span class="a n">{{ (-t.amount_cents) | money }}</span>
+          </div>
+          {% else %}
+          <p class="muted cempty">Nothing spent here this month.</p>
+          {% endfor %}
+        </div>
+      </details>
+      {% else %}
+      <p class="muted">No categories yet — add some on the
+        <a href="{{ url_for('budget.index') }}">Budget</a> page.</p>
+      {% endfor %}
+
+      {% if uncat_spend %}
+      <div class="dh" style="margin:var(--s-3) 0 0; padding-top:var(--s-2);
+                             border-top:1px solid var(--line)">
+        <span class="muted"><strong class="n">{{ uncat_spend | money }}</strong> spent with no category</span>
+        <a href="{{ url_for('transactions.index', category='none') }}">Sort it out →</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <div class="dh">
+        <h3>Recent activity</h3>
+        <a href="{{ url_for('transactions.index') }}">See all</a>
+      </div>
+      {% for t in recent %}
+      <div class="tr">
+        {{ glyph(t.cat_icon, t.cat_colour) }}
+        <div>{{ t.merchant or t.note or '—' }}
+          <div class="c2">{{ t.category_name or 'Uncategorized' }}
+            · <span class="nowrap">{{ t.txn_date }}</span></div></div>
+        <span class="am n {{ 'i' if t.amount_cents > 0 }}">{{ t.amount_cents | money_signed }}</span>
+      </div>
+      {% else %}
+      <p class="muted">Nothing yet — add your first transaction on the
+        <a href="{{ url_for('transactions.index') }}">Transactions</a> page, or set up
+        the email feed in <a href="{{ url_for('settings.index') }}">Settings</a>.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:var(--s-3)">
+  <div class="dh">
+    <h3>Income, spending &amp; what you kept · 6 months</h3>
+    <a href="{{ url_for('dashboard.history') }}">12 months →</a>
+  </div>
+  <a class="trendlink" href="{{ url_for('dashboard.history') }}"
+     aria-label="Open the last 12 months">
+    {% include "_chart.html" %}
+  </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='pending-toggle.js') }}" defer></script>
+{% endblock %}
